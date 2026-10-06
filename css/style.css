@@ -355,3 +355,80 @@
     display: none;
   }
 }
+/* =========================================================
+   ABSOLUTE PROFILE IMAGE SIZE FIX
+   ========================================================= */
+
+/* Top-right user avatar */
+#topUser img {
+  width: 32px !important;
+  height: 32px !important;
+
+  min-width: 32px !important;
+  min-height: 32px !important;
+
+  max-width: 32px !important;
+  max-height: 32px !important;
+
+  display: block !important;
+
+  object-fit: cover !important;
+  object-position: center !important;
+
+  border-radius: 50% !important;
+
+  flex: 0 0 32px !important;
+
+  overflow: hidden !important;
+}
+
+
+/* Sidebar profile avatar */
+#sidebar img {
+  width: 34px !important;
+  height: 34px !important;
+
+  min-width: 34px !important;
+  min-height: 34px !important;
+
+  max-width: 34px !important;
+  max-height: 34px !important;
+
+  display: block !important;
+
+  object-fit: cover !important;
+  object-position: center !important;
+
+  border-radius: 50% !important;
+
+  flex: 0 0 34px !important;
+
+  overflow: hidden !important;
+}
+
+
+/* Specifically protect the bottom-left account area */
+.sidebar-bottom img {
+  width: 34px !important;
+  height: 34px !important;
+
+  min-width: 34px !important;
+  min-height: 34px !important;
+
+  max-width: 34px !important;
+  max-height: 34px !important;
+
+  object-fit: cover !important;
+  object-position: center !important;
+
+  border-radius: 50% !important;
+
+  display: block !important;
+}
+
+
+/* Prevent profile images from stretching their parents */
+#topUser,
+#sidebar {
+  overflow: hidden;
+}
