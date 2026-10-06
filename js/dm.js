@@ -29,10 +29,7 @@ const rtcConfig = {
    ========================================================= */
 
 document.addEventListener("DOMContentLoaded", async () => {
-
-  if (!(await JC.boot(false))) {
-    return;
-  }
+  if (!(await JC.boot(false))) return;
 
   await loadConversations();
   await preparePeopleModal();
@@ -84,122 +81,77 @@ document.addEventListener("DOMContentLoaded", async () => {
    ========================================================= */
 
 async function loadConversations() {
-
-  const {
-    data,
-    error
-  } = await JC.sb
-    .from("dm_conversations")
-    .select("id,user_a,user_b,created_at")
-    .or(
-      `user_a.eq.${JC.user.id},user_b.eq.${JC.user.id}`
-    )
+  const { data, error } = await JC.sb
+    .from("direct_conversations")
+    .select(`
+      id,
+      created_at,
+      direct_participants(
+        user_id,
+        profiles(
+          id,
+          username,
+          display_name,
+          avatar_url
+        )
+      )
+    `)
     .order("created_at", {
       ascending: false
     });
 
   if (error) {
-
-    console.error(
-      "Conversation loading error:",
-      error
-    );
-
+    console.error("Conversation loading error:", error);
     showConversationError(error.message);
-
     return;
   }
 
-  conversations = data || [];
+  conversations = (data || [])
+    .map(conversation => {
+      const participants =
+        conversation.direct_participants || [];
 
-  const otherIds = conversations.map(conversation =>
-    conversation.user_a === JC.user.id
-      ? conversation.user_b
-      : conversation.user_a
-  );
+      const otherParticipant =
+        participants.find(
+          participant =>
+            participant.user_id !== JC.user.id
+        );
 
-  if (!otherIds.length) {
+      if (!otherParticipant) {
+        return null;
+      }
 
-    renderConversationList();
-
-    await subscribeToConversationList();
-
-    return;
-  }
-
-  const {
-    data: profiles,
-    error: profileError
-  } = await JC.sb
-    .from("profiles")
-    .select(
-      "id,username,display_name,avatar_url"
-    )
-    .in("id", otherIds);
-
-  if (profileError) {
-    console.error(
-      "Profile loading error:",
-      profileError
-    );
-  }
-
-  const profileMap = new Map(
-    (profiles || []).map(profile => [
-      profile.id,
-      profile
-    ])
-  );
-
-  conversations = conversations.map(conversation => {
-
-    const otherId =
-      conversation.user_a === JC.user.id
-        ? conversation.user_b
-        : conversation.user_a;
-
-    return {
-      ...conversation,
-
-      other:
-        profileMap.get(otherId) || {
-          id: otherId,
-          display_name: "User",
-          username: "user",
-          avatar_url: null
-        }
-    };
-
-  });
+      return {
+        id: conversation.id,
+        created_at: conversation.created_at,
+        other:
+          otherParticipant.profiles || {
+            id: otherParticipant.user_id,
+            display_name: "User",
+            username: "user",
+            avatar_url: null
+          }
+      };
+    })
+    .filter(Boolean);
 
   renderConversationList();
-
   await subscribeToConversationList();
 
   const wantedUser =
-    new URLSearchParams(location.search)
-      .get("user");
+    new URLSearchParams(location.search).get("user");
 
   if (wantedUser) {
-
-    const existingConversation =
+    const existing =
       conversations.find(
         conversation =>
           conversation.other.id === wantedUser
       );
 
-    if (existingConversation) {
-
-      await openConversation(
-        existingConversation.id
-      );
-
+    if (existing) {
+      await openConversation(existing.id);
     } else {
-
-      await createConversation(
-        wantedUser
-      );
-
+      await createConversation(wantedUser);
     }
   }
 }
@@ -210,26 +162,21 @@ async function loadConversations() {
    ========================================================= */
 
 function renderConversationList() {
-
   const box =
-    document.getElementById(
-      "conversationList"
-    );
+    document.getElementById("conversationList");
 
   if (!box) return;
 
   const search =
     (
-      document.getElementById(
-        "dmSearch"
-      )?.value || ""
+      document.getElementById("dmSearch")?.value ||
+      ""
     )
       .trim()
       .toLowerCase();
 
   const filtered =
     conversations.filter(conversation => {
-
       const name =
         (
           conversation.other?.display_name ||
@@ -247,36 +194,28 @@ function renderConversationList() {
         name.includes(search) ||
         username.includes(search)
       );
-
     });
 
   if (!filtered.length) {
-
     box.innerHTML = `
       <div class="dm-no-conversations">
         <span>✉</span>
         <p>No conversations yet.</p>
       </div>
     `;
-
     return;
   }
 
-  box.innerHTML =
-    filtered.map(conversation => {
-
-      const other =
-        conversation.other;
+  box.innerHTML = filtered
+    .map(conversation => {
+      const other = conversation.other;
 
       let avatarHTML;
 
-      if (other?.avatar_url) {
-
+      if (other.avatar_url) {
         avatarHTML = `
           <img
-            src="${escapeHTML(
-              other.avatar_url
-            )}"
+            src="${escapeHTML(other.avatar_url)}"
             alt=""
             width="40"
             height="40"
@@ -294,20 +233,16 @@ function renderConversationList() {
             "
           >
         `;
-
       } else {
-
         avatarHTML = `
           <span>
             ${escapeHTML(
               (
-                other?.display_name ||
-                "U"
+                other.display_name || "U"
               )[0].toUpperCase()
             )}
           </span>
         `;
-
       }
 
       return `
@@ -319,58 +254,45 @@ function renderConversationList() {
           }"
           data-conversation="${conversation.id}"
         >
-
           <div class="dm-list-avatar">
             ${avatarHTML}
           </div>
 
           <div class="dm-list-text">
-
             <strong>
               ${escapeHTML(
-                other?.display_name ||
-                "User"
+                other.display_name || "User"
               )}
             </strong>
 
             <small>
               @${escapeHTML(
-                other?.username ||
-                "user"
+                other.username || "user"
               )}
             </small>
-
           </div>
-
         </button>
       `;
-
-    }).join("");
+    })
+    .join("");
 
   box
-    .querySelectorAll(
-      "[data-conversation]"
-    )
+    .querySelectorAll("[data-conversation]")
     .forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () =>
-          openConversation(
-            button.dataset.conversation
-          )
-      );
-
+      button.addEventListener("click", () => {
+        openConversation(
+          button.dataset.conversation
+        );
+      });
     });
 }
 
 
 /* =========================================================
-   PEOPLE MODAL
+   PEOPLE
    ========================================================= */
 
 async function preparePeopleModal() {
-
   const {
     data,
     error
@@ -379,43 +301,31 @@ async function preparePeopleModal() {
     .select(
       "id,username,display_name,avatar_url"
     )
-    .neq(
-      "id",
-      JC.user.id
-    )
-    .order(
-      "display_name",
-      {
-        ascending: true
-      }
-    )
+    .neq("id", JC.user.id)
+    .order("display_name", {
+      ascending: true
+    })
     .limit(200);
 
   if (error) {
-
     console.error(
       "People loading error:",
       error
     );
 
     window.jcPeople = [];
-
     return;
   }
 
-  window.jcPeople =
-    data || [];
+  window.jcPeople = data || [];
 
   renderPeople();
 }
 
 
 function renderPeople() {
-
   const box =
-    document.getElementById(
-      "peopleList"
-    );
+    document.getElementById("peopleList");
 
   if (!box) return;
 
@@ -429,20 +339,15 @@ function renderPeople() {
       .toLowerCase();
 
   const people =
-    (
-      window.jcPeople || []
-    ).filter(person => {
-
+    (window.jcPeople || []).filter(person => {
       const name =
         (
-          person.display_name ||
-          ""
+          person.display_name || ""
         ).toLowerCase();
 
       const username =
         (
-          person.username ||
-          ""
+          person.username || ""
         ).toLowerCase();
 
       return (
@@ -450,28 +355,23 @@ function renderPeople() {
         name.includes(search) ||
         username.includes(search)
       );
-
     });
 
   if (!people.length) {
-
     box.innerHTML = `
       <div class="dm-no-conversations">
         <span>⌕</span>
         <p>No people found.</p>
       </div>
     `;
-
     return;
   }
 
-  box.innerHTML =
-    people.map(person => {
-
+  box.innerHTML = people
+    .map(person => {
       let avatarHTML;
 
       if (person.avatar_url) {
-
         avatarHTML = `
           <img
             src="${escapeHTML(
@@ -494,20 +394,16 @@ function renderPeople() {
             "
           >
         `;
-
       } else {
-
         avatarHTML = `
           <span>
             ${escapeHTML(
               (
-                person.display_name ||
-                "U"
+                person.display_name || "U"
               )[0].toUpperCase()
             )}
           </span>
         `;
-
       }
 
       return `
@@ -515,68 +411,49 @@ function renderPeople() {
           class="person-row"
           data-user="${person.id}"
         >
-
           <div class="person-avatar">
             ${avatarHTML}
           </div>
 
           <div>
-
             <strong>
               ${escapeHTML(
-                person.display_name ||
-                "User"
+                person.display_name || "User"
               )}
             </strong>
 
             <small>
               @${escapeHTML(
-                person.username ||
-                "user"
+                person.username || "user"
               )}
             </small>
-
           </div>
-
         </button>
       `;
+    })
+    .join("");
 
-    }).join("");
-  
   box
-    .querySelectorAll(
-      "[data-user]"
-    )
+    .querySelectorAll("[data-user]")
     .forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () =>
-          createConversation(
-            button.dataset.user
-          )
-      );
-
+      button.addEventListener("click", () => {
+        createConversation(
+          button.dataset.user
+        );
+      });
     });
 }
 
 
 function openPeopleModal() {
-
   const search =
-    document.getElementById(
-      "peopleSearch"
-    );
+    document.getElementById("peopleSearch");
 
-  if (search) {
-    search.value = "";
-  }
+  if (search) search.value = "";
 
   renderPeople();
 
-  openModal(
-    "newDmModal"
-  );
+  openModal("newDmModal");
 }
 
 
@@ -587,10 +464,7 @@ function openPeopleModal() {
 async function createConversation(
   otherUserId
 ) {
-
-  if (!otherUserId) {
-    return;
-  }
+  if (!otherUserId) return;
 
   const {
     data,
@@ -598,51 +472,38 @@ async function createConversation(
   } = await JC.sb.rpc(
     "get_or_create_dm",
     {
-      p_other_user:
-        otherUserId
+      p_other_user: otherUserId
     }
   );
 
   if (error) {
-
     console.error(
-      "Create DM error:",
+      "Create conversation error:",
       error
     );
 
-    alert(
-      error.message
-    );
-
+    alert(error.message);
     return;
   }
 
-  closeModal(
-    "newDmModal"
-  );
+  closeModal("newDmModal");
 
   await loadConversations();
 
-  await openConversation(
-    data
-  );
+  await openConversation(data);
 }
 
 
 async function openConversation(
   conversationId
 ) {
-
   const conversation =
     conversations.find(
       item =>
-        item.id ===
-        conversationId
+        item.id === conversationId
     );
 
-  if (!conversation) {
-    return;
-  }
+  if (!conversation) return;
 
   activeConversationId =
     conversationId;
@@ -654,22 +515,16 @@ async function openConversation(
 
   document
     .getElementById("dmEmpty")
-    ?.classList.add(
-      "hidden"
-    );
+    ?.classList.add("hidden");
 
   document
     .getElementById("dmActive")
-    ?.classList.remove(
-      "hidden"
-    );
+    ?.classList.remove("hidden");
 
   paintActivePerson();
 
   await loadDMMessages();
-
   await subscribeToDM();
-
   await setupCallChannel();
 }
 
@@ -679,22 +534,16 @@ async function openConversation(
    ========================================================= */
 
 function paintActivePerson() {
-
-  if (!activeOtherUser) {
-    return;
-  }
+  if (!activeOtherUser) return;
 
   const avatar =
-    document.getElementById(
-      "dmAvatar"
-    );
+    document.getElementById("dmAvatar");
 
   const name =
     activeOtherUser.display_name ||
     "User";
 
   if (activeOtherUser.avatar_url) {
-
     avatar.innerHTML = `
       <img
         src="${escapeHTML(
@@ -717,19 +566,14 @@ function paintActivePerson() {
         "
       >
     `;
-
   } else {
-
     avatar.textContent =
-      name[0]?.toUpperCase() ||
-      "U";
-
+      name[0]?.toUpperCase() || "U";
   }
 
   document.getElementById(
     "dmName"
-  ).textContent =
-    name;
+  ).textContent = name;
 
   document.getElementById(
     "dmUsername"
@@ -743,7 +587,6 @@ function paintActivePerson() {
    ========================================================= */
 
 async function loadDMMessages() {
-
   const {
     data,
     error
@@ -756,12 +599,9 @@ async function loadDMMessages() {
       "conversation_id",
       activeConversationId
     )
-    .order(
-      "created_at",
-      {
-        ascending: true
-      }
-    )
+    .order("created_at", {
+      ascending: true
+    })
     .limit(300);
 
   const box =
@@ -772,17 +612,14 @@ async function loadDMMessages() {
   if (!box) return;
 
   if (error) {
-
     box.innerHTML = `
       <div class="setup-warning">
-        ${escapeHTML(
-          error.message
-        )}
+        ${escapeHTML(error.message)}
       </div>
     `;
 
     console.error(
-      "Load DM messages error:",
+      "Load messages error:",
       error
     );
 
@@ -792,18 +629,11 @@ async function loadDMMessages() {
   box.innerHTML = "";
 
   if (!(data || []).length) {
-
     box.innerHTML = `
       <div class="chat-empty">
         <div>👋</div>
-
-        <h3>
-          Start the conversation.
-        </h3>
-
-        <p>
-          Send the first message.
-        </p>
+        <h3>Start the conversation.</h3>
+        <p>Send the first message.</p>
       </div>
     `;
 
@@ -817,19 +647,16 @@ async function loadDMMessages() {
 
 
 /* =========================================================
-   REALTIME DM
+   REALTIME MESSAGE SUBSCRIPTION
    ========================================================= */
 
 async function subscribeToDM() {
-
   if (dmSubscription) {
-
     await JC.sb.removeChannel(
       dmSubscription
     );
 
-    dmSubscription =
-      null;
+    dmSubscription = null;
   }
 
   dmSubscription =
@@ -847,11 +674,9 @@ async function subscribeToDM() {
             `conversation_id=eq.${activeConversationId}`
         },
         payload => {
-
           appendDMMessage(
             payload.new
           );
-
         }
       )
       .subscribe();
@@ -865,7 +690,6 @@ async function subscribeToDM() {
 function appendDMMessage(
   message
 ) {
-
   const box =
     document.getElementById(
       "dmMessages"
@@ -873,21 +697,16 @@ function appendDMMessage(
 
   if (!box) return;
 
-  const messageId =
-    message.id;
-
   if (
     box.querySelector(
-      `[data-dm-id="${messageId}"]`
+      `[data-dm-id="${message.id}"]`
     )
   ) {
     return;
   }
 
   if (
-    box.querySelector(
-      ".chat-empty"
-    )
+    box.querySelector(".chat-empty")
   ) {
     box.innerHTML = "";
   }
@@ -900,9 +719,7 @@ function appendDMMessage(
     senderId === JC.user.id;
 
   const row =
-    document.createElement(
-      "div"
-    );
+    document.createElement("div");
 
   row.className =
     `dm-message ${
@@ -910,18 +727,15 @@ function appendDMMessage(
     }`;
 
   row.dataset.dmId =
-    messageId;
+    message.id;
 
   const time =
     new Date(
       message.created_at
-    ).toLocaleTimeString(
-      [],
-      {
-        hour: "2-digit",
-        minute: "2-digit"
-      }
-    );
+    ).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
 
   row.innerHTML = `
     <div class="dm-bubble">
@@ -939,9 +753,7 @@ function appendDMMessage(
     </div>
   `;
 
-  box.appendChild(
-    row
-  );
+  box.appendChild(row);
 
   box.scrollTop =
     box.scrollHeight;
@@ -949,13 +761,10 @@ function appendDMMessage(
 
 
 /* =========================================================
-   SEND DM
+   SEND MESSAGE
    ========================================================= */
 
-async function sendDM(
-  event
-) {
-
+async function sendDM(event) {
   event.preventDefault();
 
   if (!activeConversationId) {
@@ -967,29 +776,18 @@ async function sendDM(
       "dmInput"
     );
 
-  if (!input) {
-    return;
-  }
+  if (!input) return;
 
   const content =
     input.value.trim();
 
-  if (!content) {
-    return;
-  }
-
-  /*
-    IMPORTANT:
-    Your current database requires user_id.
-    We send user_id AND sender_id.
-  */
+  if (!content) return;
 
   const {
     error
   } = await JC.sb
     .from("direct_messages")
     .insert({
-
       conversation_id:
         activeConversationId,
 
@@ -999,21 +797,16 @@ async function sendDM(
       sender_id:
         JC.user.id,
 
-      content:
-        content
+      content
     });
 
   if (error) {
-
     console.error(
-      "Send DM error:",
+      "Send message error:",
       error
     );
 
-    alert(
-      error.message
-    );
-
+    alert(error.message);
     return;
   }
 
@@ -1027,7 +820,6 @@ async function sendDM(
    ========================================================= */
 
 async function subscribeToConversationList() {
-
   if (dmListSubscription) {
     return;
   }
@@ -1042,12 +834,10 @@ async function subscribeToConversationList() {
         {
           event: "INSERT",
           schema: "public",
-          table: "dm_conversations"
+          table: "direct_conversations"
         },
         async () => {
-
           await loadConversations();
-
         }
       )
       .subscribe();
@@ -1055,23 +845,20 @@ async function subscribeToConversationList() {
 
 
 /* =========================================================
-   VOICE CALL CHANNEL
+   VOICE CALL SIGNALING
    ========================================================= */
 
 async function setupCallChannel() {
-
   if (!activeConversationId) {
     return;
   }
 
   if (callChannel) {
-
     await JC.sb.removeChannel(
       callChannel
     );
 
-    callChannel =
-      null;
+    callChannel = null;
   }
 
   callChannel =
@@ -1087,7 +874,6 @@ async function setupCallChannel() {
         event: "call-offer"
       },
       async ({ payload }) => {
-
         if (
           payload.from ===
           JC.user.id
@@ -1108,7 +894,6 @@ async function setupCallChannel() {
         event: "call-answer"
       },
       async ({ payload }) => {
-
         if (
           payload.from ===
           JC.user.id
@@ -1121,7 +906,6 @@ async function setupCallChannel() {
         }
 
         try {
-
           await peer.setRemoteDescription(
             new RTCSessionDescription(
               payload.answer
@@ -1133,14 +917,11 @@ async function setupCallChannel() {
           setCallStatus(
             "Connected"
           );
-
         } catch (error) {
-
           console.error(
-            "Answer error:",
+            "Call answer error:",
             error
           );
-
         }
       }
     )
@@ -1151,7 +932,6 @@ async function setupCallChannel() {
         event: "ice-candidate"
       },
       async ({ payload }) => {
-
         if (
           payload.from ===
           JC.user.id
@@ -1159,9 +939,7 @@ async function setupCallChannel() {
           return;
         }
 
-        if (
-          !payload.candidate
-        ) {
+        if (!payload.candidate) {
           return;
         }
 
@@ -1169,7 +947,6 @@ async function setupCallChannel() {
           !peer ||
           !peer.remoteDescription
         ) {
-
           pendingCandidates.push(
             payload.candidate
           );
@@ -1178,20 +955,16 @@ async function setupCallChannel() {
         }
 
         try {
-
           await peer.addIceCandidate(
             new RTCIceCandidate(
               payload.candidate
             )
           );
-
         } catch (error) {
-
           console.error(
             "ICE error:",
             error
           );
-
         }
       }
     )
@@ -1202,7 +975,6 @@ async function setupCallChannel() {
         event: "hangup"
       },
       ({ payload }) => {
-
         if (
           payload.from ===
           JC.user.id
@@ -1219,19 +991,16 @@ async function setupCallChannel() {
 
 
 /* =========================================================
-   START VOICE CALL
+   START CALL
    ========================================================= */
 
 async function startVoiceCall() {
-
   if (!activeConversationId) {
     return;
   }
 
   try {
-
     await setupCallChannel();
-
     await createPeerConnection();
 
     localStream =
@@ -1244,12 +1013,10 @@ async function startVoiceCall() {
     localStream
       .getTracks()
       .forEach(track => {
-
         peer.addTrack(
           track,
           localStream
         );
-
       });
 
     const offer =
@@ -1264,34 +1031,22 @@ async function startVoiceCall() {
     );
 
     await callChannel.send({
-
-      type:
-        "broadcast",
-
-      event:
-        "call-offer",
-
+      type: "broadcast",
+      event: "call-offer",
       payload: {
-
-        from:
-          JC.user.id,
-
-        offer:
-          peer.localDescription
-
+        from: JC.user.id,
+        offer: peer.localDescription
       }
-
     });
 
   } catch (error) {
-
     console.error(
       "Start call error:",
       error
     );
 
     alert(
-      "Couldn't start the call. Check microphone permissions."
+      "Couldn't start the call. Check your microphone permission."
     );
 
     await hangup(false);
@@ -1300,11 +1055,10 @@ async function startVoiceCall() {
 
 
 /* =========================================================
-   ACCEPT VOICE CALL
+   ACCEPT CALL
    ========================================================= */
 
 async function acceptIncomingCall() {
-
   if (!pendingOffer) {
     return;
   }
@@ -1314,9 +1068,7 @@ async function acceptIncomingCall() {
   );
 
   try {
-
     await setupCallChannel();
-
     await createPeerConnection();
 
     localStream =
@@ -1329,12 +1081,10 @@ async function acceptIncomingCall() {
     localStream
       .getTracks()
       .forEach(track => {
-
         peer.addTrack(
           track,
           localStream
         );
-
       });
 
     await peer.setRemoteDescription(
@@ -1357,37 +1107,24 @@ async function acceptIncomingCall() {
     );
 
     await callChannel.send({
-
-      type:
-        "broadcast",
-
-      event:
-        "call-answer",
-
+      type: "broadcast",
+      event: "call-answer",
       payload: {
-
-        from:
-          JC.user.id,
-
-        answer:
-          peer.localDescription
-
+        from: JC.user.id,
+        answer: peer.localDescription
       }
-
     });
 
-    pendingOffer =
-      null;
+    pendingOffer = null;
 
   } catch (error) {
-
     console.error(
       "Accept call error:",
       error
     );
 
     alert(
-      "Couldn't answer the call. Check microphone permissions."
+      "Couldn't answer the call. Check your microphone permission."
     );
 
     await hangup(false);
@@ -1400,7 +1137,6 @@ async function acceptIncomingCall() {
    ========================================================= */
 
 async function createPeerConnection() {
-
   peer =
     new RTCPeerConnection(
       rtcConfig
@@ -1408,7 +1144,6 @@ async function createPeerConnection() {
 
   peer.ontrack =
     event => {
-
       const remoteAudio =
         document.getElementById(
           "remoteAudio"
@@ -1428,7 +1163,6 @@ async function createPeerConnection() {
 
   peer.onicecandidate =
     async event => {
-
       if (
         !event.candidate ||
         !callChannel
@@ -1437,89 +1171,55 @@ async function createPeerConnection() {
       }
 
       await callChannel.send({
-
-        type:
-          "broadcast",
-
-        event:
-          "ice-candidate",
-
+        type: "broadcast",
+        event: "ice-candidate",
         payload: {
-
-          from:
-            JC.user.id,
-
+          from: JC.user.id,
           candidate:
             event.candidate
-
         }
-
       });
     };
 
   peer.onconnectionstatechange =
     () => {
-
-      if (!peer) {
-        return;
-      }
+      if (!peer) return;
 
       const state =
         peer.connectionState;
 
-      if (
-        state ===
-        "connecting"
-      ) {
-
+      if (state === "connecting") {
         setCallStatus(
           "Connecting..."
         );
-
       }
 
-      if (
-        state ===
-        "connected"
-      ) {
-
+      if (state === "connected") {
         setCallStatus(
           "Connected"
         );
-
       }
 
-      if (
-        state ===
-        "disconnected"
-      ) {
-
+      if (state === "disconnected") {
         setCallStatus(
           "Disconnected"
         );
-
       }
 
-      if (
-        state ===
-        "failed"
-      ) {
-
+      if (state === "failed") {
         setCallStatus(
           "Connection failed"
         );
-
       }
     };
 }
 
 
 /* =========================================================
-   ICE CANDIDATES
+   ICE
    ========================================================= */
 
 async function flushCandidates() {
-
   if (
     !peer ||
     !peer.remoteDescription
@@ -1531,22 +1231,17 @@ async function flushCandidates() {
     const candidate
     of pendingCandidates
   ) {
-
     try {
-
       await peer.addIceCandidate(
         new RTCIceCandidate(
           candidate
         )
       );
-
     } catch (error) {
-
       console.error(
-        "Queued ICE error:",
+        "ICE candidate error:",
         error
       );
-
     }
   }
 
@@ -1555,11 +1250,10 @@ async function flushCandidates() {
 
 
 /* =========================================================
-   INCOMING CALL UI
+   INCOMING CALL
    ========================================================= */
 
 function showIncomingCall() {
-
   const name =
     activeOtherUser?.display_name ||
     "Someone";
@@ -1627,13 +1321,11 @@ function showIncomingCall() {
 
 
 function declineIncomingCall() {
-
   closeModal(
     "incomingCallModal"
   );
 
-  pendingOffer =
-    null;
+  pendingOffer = null;
 }
 
 
@@ -1644,7 +1336,6 @@ function declineIncomingCall() {
 function showActiveCall(
   status
 ) {
-
   document
     .getElementById(
       "activeCallBar"
@@ -1662,7 +1353,6 @@ function showActiveCall(
 function setCallStatus(
   status
 ) {
-
   const element =
     document.getElementById(
       "callStatus"
@@ -1680,7 +1370,6 @@ function setCallStatus(
    ========================================================= */
 
 function toggleMute() {
-
   if (!localStream) {
     return;
   }
@@ -1701,12 +1390,10 @@ function toggleMute() {
     );
 
   if (button) {
-
     button.textContent =
       track.enabled
         ? "🎙"
         : "🔇";
-
   }
 }
 
@@ -1718,43 +1405,28 @@ function toggleMute() {
 async function hangup(
   notify = true
 ) {
-
   if (
     notify &&
     callChannel
   ) {
 
     try {
-
       await callChannel.send({
-
-        type:
-          "broadcast",
-
-        event:
-          "hangup",
-
+        type: "broadcast",
+        event: "hangup",
         payload: {
-
-          from:
-            JC.user.id
-
+          from: JC.user.id
         }
-
       });
-
     } catch (error) {
-
       console.error(
         "Hangup error:",
         error
       );
-
     }
   }
 
   if (localStream) {
-
     localStream
       .getTracks()
       .forEach(
@@ -1762,22 +1434,14 @@ async function hangup(
           track.stop()
       );
 
-    localStream =
-      null;
+    localStream = null;
   }
 
   if (peer) {
-
-    peer.ontrack =
-      null;
-
-    peer.onicecandidate =
-      null;
-
+    peer.ontrack = null;
+    peer.onicecandidate = null;
     peer.close();
-
-    peer =
-      null;
+    peer = null;
   }
 
   const remoteAudio =
@@ -1790,11 +1454,8 @@ async function hangup(
       null;
   }
 
-  pendingOffer =
-    null;
-
-  pendingCandidates =
-    [];
+  pendingOffer = null;
+  pendingCandidates = [];
 
   document
     .getElementById(
@@ -1823,15 +1484,12 @@ async function hangup(
 function showConversationError(
   message
 ) {
-
   const box =
     document.getElementById(
       "conversationList"
     );
 
-  if (!box) {
-    return;
-  }
+  if (!box) return;
 
   box.innerHTML = `
     <div class="setup-warning">
