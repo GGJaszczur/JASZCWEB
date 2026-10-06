@@ -8,8 +8,9 @@ window.JC = {
     const cfg = window.JASZCWEB_CONFIG;
 
     if (
-      !cfg?.supabaseUrl ||
-      !cfg?.supabasePublishableKey ||
+      !cfg ||
+      !cfg.supabaseUrl ||
+      !cfg.supabasePublishableKey ||
       cfg.supabaseUrl.includes("YOUR_") ||
       cfg.supabasePublishableKey.includes("YOUR_")
     ) {
@@ -29,11 +30,10 @@ window.JC = {
     if (!this.sb) return null;
 
     const {
-      data: { session },
-      error: sessionError
+      data: { session }
     } = await this.sb.auth.getSession();
 
-    if (sessionError || !session) {
+    if (!session) {
       window.location.href = "index.html";
       return null;
     }
@@ -93,59 +93,96 @@ window.JC = {
 
     return name
       .split(/\s+/)
-      .map(part => part[0])
+      .map(x => x[0])
       .join("")
       .slice(0, 2)
       .toUpperCase();
   },
 
-  getAvatarHTML(className = "") {
-    const avatar = this.profile?.avatar_url;
-    const initials = this.getInitials();
-
-    if (avatar) {
-      return `
-        <img
-          class="${className}"
-          src="${escapeHTML(avatar)}"
-          alt="${escapeHTML(this.profile?.display_name || "User")}"
-          loading="lazy"
-        >
-      `;
-    }
-
-    return `
-      <span class="${className} avatar-fallback">
-        ${escapeHTML(initials)}
-      </span>
-    `;
-  },
-
   paintUser() {
-    const name = this.profile?.display_name || "User";
-
     const top = document.getElementById("topUser");
 
-    if (top) {
-      const avatar = this.profile?.avatar_url;
+    if (!top) return;
 
+    const name = this.profile?.display_name || "User";
+    const avatar = this.profile?.avatar_url;
+
+    if (avatar) {
       top.innerHTML = `
-        <a class="top-profile" href="profile.html">
-          ${
-            avatar
-              ? `
-                <img
-                  class="top-user-avatar"
-                  src="${escapeHTML(avatar)}"
-                  alt="${escapeHTML(name)}"
-                >
-              `
-              : `
-                <span class="top-user-avatar avatar-fallback">
-                  ${escapeHTML(this.getInitials())}
-                </span>
-              `
-          }
+        <a
+          href="profile.html"
+          style="
+            display:flex;
+            align-items:center;
+            gap:9px;
+            text-decoration:none;
+            color:inherit;
+          "
+        >
+          <span
+            style="
+              width:32px;
+              height:32px;
+              min-width:32px;
+              max-width:32px;
+              min-height:32px;
+              max-height:32px;
+              display:block;
+              border-radius:50%;
+              overflow:hidden;
+              flex-shrink:0;
+            "
+          >
+            <img
+              src="${escapeHTML(avatar)}"
+              alt=""
+              style="
+                width:32px !important;
+                height:32px !important;
+                min-width:32px !important;
+                max-width:32px !important;
+                min-height:32px !important;
+                max-height:32px !important;
+                display:block !important;
+                object-fit:cover !important;
+                object-position:center !important;
+                border-radius:50% !important;
+                overflow:hidden !important;
+              "
+            >
+          </span>
+
+          <span>${escapeHTML(name)}</span>
+        </a>
+      `;
+    } else {
+      top.innerHTML = `
+        <a
+          href="profile.html"
+          style="
+            display:flex;
+            align-items:center;
+            gap:9px;
+            text-decoration:none;
+            color:inherit;
+          "
+        >
+          <span
+            style="
+              width:32px;
+              height:32px;
+              min-width:32px;
+              display:grid;
+              place-items:center;
+              border-radius:50%;
+              background:var(--accent);
+              color:#080900;
+              font-size:9px;
+              font-weight:900;
+            "
+          >
+            ${escapeHTML(this.getInitials())}
+          </span>
 
           <span>${escapeHTML(name)}</span>
         </a>
@@ -154,9 +191,9 @@ window.JC = {
   },
 
   paintSidebar() {
-    const el = document.getElementById("sidebar");
+    const sidebar = document.getElementById("sidebar");
 
-    if (!el) return;
+    if (!sidebar) return;
 
     const c = this.community;
 
@@ -164,21 +201,69 @@ window.JC = {
       ? `?community=${encodeURIComponent(c.id)}`
       : "";
 
-    const sidebarAvatar = this.profile?.avatar_url
-      ? `
-        <img
-          class="sidebar-user-avatar"
-          src="${escapeHTML(this.profile.avatar_url)}"
-          alt="${escapeHTML(this.profile.display_name || "User")}"
+    const name = this.profile?.display_name || "User";
+    const username = this.profile?.username || "user";
+    const avatar = this.profile?.avatar_url;
+
+    let avatarHTML = "";
+
+    if (avatar) {
+      avatarHTML = `
+        <span
+          style="
+            width:34px;
+            height:34px;
+            min-width:34px;
+            max-width:34px;
+            min-height:34px;
+            max-height:34px;
+            display:block;
+            overflow:hidden;
+            flex-shrink:0;
+            border-radius:50%;
+          "
         >
-      `
-      : `
-        <span class="sidebar-user-avatar avatar-fallback">
+          <img
+            src="${escapeHTML(avatar)}"
+            alt=""
+            style="
+              width:34px !important;
+              height:34px !important;
+              min-width:34px !important;
+              max-width:34px !important;
+              min-height:34px !important;
+              max-height:34px !important;
+              display:block !important;
+              object-fit:cover !important;
+              object-position:center !important;
+              border-radius:50% !important;
+              overflow:hidden !important;
+            "
+          >
+        </span>
+      `;
+    } else {
+      avatarHTML = `
+        <span
+          style="
+            width:34px;
+            height:34px;
+            min-width:34px;
+            display:grid;
+            place-items:center;
+            border-radius:50%;
+            background:var(--accent);
+            color:#080900;
+            font-size:9px;
+            font-weight:900;
+          "
+        >
           ${escapeHTML(this.getInitials())}
         </span>
       `;
+    }
 
-    el.innerHTML = `
+    sidebar.innerHTML = `
       <div class="sidebar-brand">
         <a class="brand" href="dashboard.html">
           JASZC<span>WEB</span>
@@ -243,39 +328,80 @@ window.JC = {
 
       <div class="sidebar-bottom">
 
-        <a class="sidebar-user" href="profile.html">
-          ${sidebarAvatar}
+        <a
+          href="profile.html"
+          style="
+            display:flex;
+            align-items:center;
+            gap:9px;
+            width:100%;
+            padding:10px 7px;
+            border-radius:8px;
+            text-decoration:none;
+            color:inherit;
+            overflow:hidden;
+          "
+        >
 
-          <div class="sidebar-user-info">
-            <strong>
-              ${escapeHTML(this.profile?.display_name || "User")}
+          ${avatarHTML}
+
+          <div
+            style="
+              min-width:0;
+              flex:1;
+              overflow:hidden;
+            "
+          >
+            <strong
+              style="
+                display:block;
+                font-size:11px;
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+              "
+            >
+              ${escapeHTML(name)}
             </strong>
 
-            <small>
-              @${escapeHTML(this.profile?.username || "user")}
+            <small
+              style="
+                display:block;
+                font-size:9px;
+                color:var(--muted);
+                margin-top:3px;
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+              "
+            >
+              @${escapeHTML(username)}
             </small>
           </div>
+
         </a>
 
-        <button id="signOutSide" class="side-signout">
+        <button
+          id="signOutSide"
+          class="side-signout"
+        >
           ↪ <span>Sign out</span>
         </button>
 
       </div>
     `;
 
-    el.querySelector("#signOutSide")?.addEventListener(
-      "click",
-      async () => {
+    document
+      .getElementById("signOutSide")
+      ?.addEventListener("click", async () => {
         await this.sb.auth.signOut();
-        location.href = "index.html";
-      }
-    );
+        window.location.href = "index.html";
+      });
 
     document
       .getElementById("mobileToggle")
       ?.addEventListener("click", () => {
-        el.classList.toggle("open");
+        sidebar.classList.toggle("open");
       });
   },
 
@@ -290,10 +416,9 @@ window.JC = {
 
     box.innerHTML = `
       <strong>JASZCWEB isn't connected yet.</strong>
-
       <p>
-        Open <code>js/config.js</code> and enter your Supabase
-        URL and publishable key.
+        Open <code>js/config.js</code> and add your Supabase URL
+        and publishable key.
       </p>
     `;
 
@@ -329,12 +454,16 @@ function escapeHTML(value = "") {
 
 
 function openModal(id) {
-  document.getElementById(id)?.classList.remove("hidden");
+  document
+    .getElementById(id)
+    ?.classList.remove("hidden");
 }
 
 
 function closeModal(id) {
-  document.getElementById(id)?.classList.add("hidden");
+  document
+    .getElementById(id)
+    ?.classList.add("hidden");
 }
 
 
