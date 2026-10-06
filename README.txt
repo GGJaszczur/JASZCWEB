@@ -1,70 +1,26 @@
-JASZCWEB — STRONA NYGGANYGGA
-============================
+JASZCWEB V2
 
-This is the real multi-user foundation for JASZCWEB.
-
-PROJECT
--------
-index.html        Login / signup
- dashboard.html   Your communities + create/join
- community.html   Channels + real-time group chat
- members.html     Community members
- settings.html    Owner customization
- profile.html     User profile
- css/style.css    Global design
- js/config.js     Supabase credentials
- js/*.js          App logic
- supabase.sql     Database, RLS, RPCs and realtime setup
-
-SETUP
------
-1. Create a Supabase project.
-2. Open the Supabase SQL Editor.
-3. Paste all of supabase.sql and run it.
-4. Open js/config.js.
-5. Replace YOUR_SUPABASE_URL and YOUR_SUPABASE_PUBLISHABLE_KEY.
-6. Open index.html through your normal web hosting/static site setup.
-
-AUTH
-----
-Supabase Auth handles signup/login.
-If email confirmation is enabled, users must confirm before they can sign in.
-
-COMMUNITIES
------------
-A user can create a community and becomes its owner.
-The create RPC automatically creates:
-- the owner membership
-- #general
-- an 8-character invite code
-
-Members join with that invite code from dashboard.html.
-
-CHAT
-----
-Messages are stored in Postgres in the messages table.
-Supabase Realtime listens for INSERT events on messages, so everyone in the same
-channel can receive new messages without refreshing.
-
-SECURITY
---------
-The SQL enables Row Level Security on the exposed tables.
-Do NOT put a Supabase service_role secret in browser code.
-Only use the project URL and publishable key in js/config.js.
-
-NEXT BUILD
-----------
-This foundation is ready for:
-- admin/moderator controls
-- kick/ban/mute
-- message edit/delete
-- reactions
-- replies
+This version adds:
+- join-by-invite UI
+- message replies
+- message reactions
+- roles: owner/admin/moderator/member
+- moderation actions: promote, kick, ban
 - direct messages
 - notifications
-- file/image uploads
-- custom emojis
-- community banners
-- voice channels
-- online presence
-- search
+- customizable profiles
+- avatar uploads
+- custom community accent + banner colors
+- private community file uploads/downloads
+- voice channels using WebRTC + Supabase Realtime signaling
+- online community presence
+
+SETUP
+1. Keep your existing js/config.js values.
+2. In Supabase SQL Editor, run the ENTIRE `supabase-v2-upgrade.sql` once.
+3. GitHub Pages will serve the same static files.
+4. For voice chat, users must allow microphone access.
+5. Voice is a peer-to-peer WebRTC mesh. It is intended for small groups; it is not a scalable SFU voice server.
+6. Supabase Storage uses an `avatars` public bucket and a private `community-files` bucket with RLS policies.
+
+The frontend uses Supabase's publishable key only. Never place a Supabase secret key in client-side files.

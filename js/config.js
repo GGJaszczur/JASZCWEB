@@ -1,1 +1,1 @@
-window.JASZCWEB_CONFIG={supabaseUrl:'https://kksrzhfrinmxhpznrobf.supabase.co',supabasePublishableKey:'sb_publishable_Fcqigon7mRiPAV4enzFIPw_3pM77hPD'};
+window.JASZCWEB_CONFIG={supabaseUrl:'YOUR_SUPABASE_URL',supabasePublishableKey:'YOUR_SUPABASE_PUBLISHABLE_KEY'};
