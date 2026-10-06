@@ -7,34 +7,27 @@ window.JC = {
   initClient() {
     const cfg = window.JASZCWEB_CONFIG;
 
-    if (
-      !cfg ||
-      !cfg.supabaseUrl ||
-      !cfg.supabasePublishableKey ||
-      cfg.supabaseUrl.includes("YOUR_") ||
-      cfg.supabasePublishableKey.includes("YOUR_")
-    ) {
+    if (!cfg?.supabaseUrl || !cfg?.supabasePublishableKey) {
       this.showSetupError();
       return false;
     }
 
-    this.sb = window.supabase.createClient(
-      cfg.supabaseUrl,
-      cfg.supabasePublishableKey
-    );
+    if (!window.supabase) {
+      this.showSetupError("Supabase library did not load.");
+      return false;
+    }
 
+    this.sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
     return true;
   },
 
   async requireAuth() {
     if (!this.sb) return null;
 
-    const {
-      data: { session }
-    } = await this.sb.auth.getSession();
+    const { data: { session } } = await this.sb.auth.getSession();
 
     if (!session) {
-      window.location.href = "index.html";
+      location.href = "index.html";
       return null;
     }
 
@@ -53,7 +46,6 @@ window.JC = {
     };
 
     this.paintUser();
-
     return this.user;
   },
 
@@ -61,7 +53,7 @@ window.JC = {
     const id = new URLSearchParams(location.search).get("community");
 
     if (!id) {
-      window.location.href = "dashboard.html";
+      location.href = "dashboard.html";
       return null;
     }
 
@@ -72,376 +64,121 @@ window.JC = {
       .single();
 
     if (error || !data) {
-      window.location.href = "dashboard.html";
+      location.href = "dashboard.html";
       return null;
     }
 
     this.community = data;
-
-    document.documentElement.style.setProperty(
-      "--accent",
-      data.accent_color || "#c8ff38"
-    );
-
+    document.documentElement.style.setProperty("--accent", data.accent_color || "#c8ff38");
     this.paintSidebar();
-
     return data;
   },
 
   getInitials() {
     const name = this.profile?.display_name || "User";
-
-    return name
-      .split(/\s+/)
-      .map(x => x[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
+    return name.split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase();
   },
 
   paintUser() {
     const top = document.getElementById("topUser");
-
     if (!top) return;
 
     const name = this.profile?.display_name || "User";
     const avatar = this.profile?.avatar_url;
 
-    if (avatar) {
-      top.innerHTML = `
-        <a
-          href="profile.html"
-          style="
-            display:flex;
-            align-items:center;
-            gap:9px;
-            text-decoration:none;
-            color:inherit;
-          "
-        >
-          <span
-            style="
-              width:32px;
-              height:32px;
-              min-width:32px;
-              max-width:32px;
-              min-height:32px;
-              max-height:32px;
-              display:block;
-              border-radius:50%;
-              overflow:hidden;
-              flex-shrink:0;
-            "
-          >
-            <img
-              src="${escapeHTML(avatar)}"
-              alt=""
-              style="
-                width:32px !important;
-                height:32px !important;
-                min-width:32px !important;
-                max-width:32px !important;
-                min-height:32px !important;
-                max-height:32px !important;
-                display:block !important;
-                object-fit:cover !important;
-                object-position:center !important;
-                border-radius:50% !important;
-                overflow:hidden !important;
-              "
-            >
-          </span>
-
-          <span>${escapeHTML(name)}</span>
-        </a>
-      `;
-    } else {
-      top.innerHTML = `
-        <a
-          href="profile.html"
-          style="
-            display:flex;
-            align-items:center;
-            gap:9px;
-            text-decoration:none;
-            color:inherit;
-          "
-        >
-          <span
-            style="
-              width:32px;
-              height:32px;
-              min-width:32px;
-              display:grid;
-              place-items:center;
-              border-radius:50%;
-              background:var(--accent);
-              color:#080900;
-              font-size:9px;
-              font-weight:900;
-            "
-          >
-            ${escapeHTML(this.getInitials())}
-          </span>
-
-          <span>${escapeHTML(name)}</span>
-        </a>
-      `;
-    }
+    top.innerHTML = `
+      <a class="top-profile" href="profile.html">
+        ${avatar ? `
+          <img class="top-user-avatar" src="${escapeHTML(avatar)}" alt="">
+        ` : `
+          <span class="top-user-avatar avatar-fallback">${escapeHTML(this.getInitials())}</span>
+        `}
+        <span>${escapeHTML(name)}</span>
+      </a>
+    `;
   },
 
   paintSidebar() {
-    const sidebar = document.getElementById("sidebar");
-
-    if (!sidebar) return;
+    const el = document.getElementById("sidebar");
+    if (!el) return;
 
     const c = this.community;
-
-    const communityQuery = c
-      ? `?community=${encodeURIComponent(c.id)}`
-      : "";
-
+    const communityQuery = c ? `?community=${encodeURIComponent(c.id)}` : "";
     const name = this.profile?.display_name || "User";
     const username = this.profile?.username || "user";
     const avatar = this.profile?.avatar_url;
 
-    let avatarHTML = "";
-
-    if (avatar) {
-      avatarHTML = `
-        <span
-          style="
-            width:34px;
-            height:34px;
-            min-width:34px;
-            max-width:34px;
-            min-height:34px;
-            max-height:34px;
-            display:block;
-            overflow:hidden;
-            flex-shrink:0;
-            border-radius:50%;
-          "
-        >
-          <img
-            src="${escapeHTML(avatar)}"
-            alt=""
-            style="
-              width:34px !important;
-              height:34px !important;
-              min-width:34px !important;
-              max-width:34px !important;
-              min-height:34px !important;
-              max-height:34px !important;
-              display:block !important;
-              object-fit:cover !important;
-              object-position:center !important;
-              border-radius:50% !important;
-              overflow:hidden !important;
-            "
-          >
-        </span>
-      `;
-    } else {
-      avatarHTML = `
-        <span
-          style="
-            width:34px;
-            height:34px;
-            min-width:34px;
-            display:grid;
-            place-items:center;
-            border-radius:50%;
-            background:var(--accent);
-            color:#080900;
-            font-size:9px;
-            font-weight:900;
-          "
-        >
-          ${escapeHTML(this.getInitials())}
-        </span>
-      `;
-    }
-
-    sidebar.innerHTML = `
+    el.innerHTML = `
       <div class="sidebar-brand">
-        <a class="brand" href="dashboard.html">
-          JASZC<span>WEB</span>
-        </a>
+        <a class="brand" href="dashboard.html">JASZC<span>WEB</span></a>
       </div>
 
       <a class="workspace-card" href="dashboard.html">
-        <div class="community-logo">
-          ${escapeHTML((c?.name || "J")[0].toUpperCase())}
-        </div>
-
+        <div class="community-logo">${escapeHTML((c?.name || "J")[0].toUpperCase())}</div>
         <div>
           <strong>${escapeHTML(c?.name || "Your communities")}</strong>
           <small>${c ? "Community" : "Dashboard"}</small>
         </div>
-
         <span>⌄</span>
       </a>
 
       <nav class="side-nav">
+        <a href="dashboard.html" class="side-link">⌂ <span>Dashboard</span></a>
+        <a href="dm.html" class="side-link">✉ <span>Direct messages</span></a>
 
-        <a href="dashboard.html" class="side-link">
-          ⌂ <span>Dashboard</span>
-        </a>
-
-        ${
-          c
-            ? `
-              <div class="side-label">COMMUNITY</div>
-
-              <a
-                href="community.html${communityQuery}"
-                class="side-link"
-              >
-                # <span>Chat</span>
-              </a>
-
-              <a
-                href="members.html${communityQuery}"
-                class="side-link"
-              >
-                ♙ <span>Members</span>
-              </a>
-
-              <a
-                href="settings.html${communityQuery}"
-                class="side-link"
-              >
-                ⚙ <span>Settings</span>
-              </a>
-            `
-            : ""
-        }
+        ${c ? `
+          <div class="side-label">COMMUNITY</div>
+          <a href="community.html${communityQuery}" class="side-link"># <span>Chat</span></a>
+          <a href="members.html${communityQuery}" class="side-link">♙ <span>Members</span></a>
+          <a href="settings.html${communityQuery}" class="side-link">⚙ <span>Settings</span></a>
+        ` : ""}
 
         <div class="side-label">ACCOUNT</div>
-
-        <a href="profile.html" class="side-link">
-          ● <span>Profile</span>
-        </a>
-
+        <a href="profile.html" class="side-link">● <span>Profile</span></a>
       </nav>
 
       <div class="sidebar-bottom">
-
-        <a
-          href="profile.html"
-          style="
-            display:flex;
-            align-items:center;
-            gap:9px;
-            width:100%;
-            padding:10px 7px;
-            border-radius:8px;
-            text-decoration:none;
-            color:inherit;
-            overflow:hidden;
-          "
-        >
-
-          ${avatarHTML}
-
-          <div
-            style="
-              min-width:0;
-              flex:1;
-              overflow:hidden;
-            "
-          >
-            <strong
-              style="
-                display:block;
-                font-size:11px;
-                white-space:nowrap;
-                overflow:hidden;
-                text-overflow:ellipsis;
-              "
-            >
-              ${escapeHTML(name)}
-            </strong>
-
-            <small
-              style="
-                display:block;
-                font-size:9px;
-                color:var(--muted);
-                margin-top:3px;
-                white-space:nowrap;
-                overflow:hidden;
-                text-overflow:ellipsis;
-              "
-            >
-              @${escapeHTML(username)}
-            </small>
+        <a class="sidebar-user" href="profile.html">
+          ${avatar ? `<img class="sidebar-user-avatar" src="${escapeHTML(avatar)}" alt="">` : `<span class="sidebar-user-avatar avatar-fallback">${escapeHTML(this.getInitials())}</span>`}
+          <div class="sidebar-user-info">
+            <strong>${escapeHTML(name)}</strong>
+            <small>@${escapeHTML(username)}</small>
           </div>
-
         </a>
 
-        <button
-          id="signOutSide"
-          class="side-signout"
-        >
-          ↪ <span>Sign out</span>
-        </button>
-
+        <button id="signOutSide" class="side-signout">↪ <span>Sign out</span></button>
       </div>
     `;
 
-    document
-      .getElementById("signOutSide")
-      ?.addEventListener("click", async () => {
-        await this.sb.auth.signOut();
-        window.location.href = "index.html";
-      });
+    el.querySelector("#signOutSide")?.addEventListener("click", async () => {
+      await this.sb.auth.signOut();
+      location.href = "index.html";
+    });
 
-    document
-      .getElementById("mobileToggle")
-      ?.addEventListener("click", () => {
-        sidebar.classList.toggle("open");
-      });
+    document.getElementById("mobileToggle")?.addEventListener("click", () => {
+      el.classList.toggle("open");
+    });
   },
 
-  showSetupError() {
-    const title = document.querySelector("h1");
-
-    if (!title) return;
+  showSetupError(message = "Open js/config.js and check your Supabase settings.") {
+    const root = document.querySelector("main") || document.body;
+    if (document.querySelector(".setup-warning")) return;
 
     const box = document.createElement("div");
-
     box.className = "setup-warning";
-
-    box.innerHTML = `
-      <strong>JASZCWEB isn't connected yet.</strong>
-      <p>
-        Open <code>js/config.js</code> and add your Supabase URL
-        and publishable key.
-      </p>
-    `;
-
-    title.parentElement?.appendChild(box);
+    box.innerHTML = `<strong>JASZCWEB connection problem.</strong><p>${escapeHTML(message)}</p>`;
+    root.prepend(box);
   },
 
   async boot(withCommunity = false) {
     if (!this.initClient()) return false;
-
     const user = await this.requireAuth();
-
     if (!user) return false;
-
-    if (withCommunity) {
-      await this.loadCommunity();
-    } else {
-      this.paintSidebar();
-    }
-
+    if (withCommunity) await this.loadCommunity();
+    else this.paintSidebar();
     return true;
   }
 };
-
 
 function escapeHTML(value = "") {
   return String(value)
@@ -452,29 +189,16 @@ function escapeHTML(value = "") {
     .replaceAll("'", "&#039;");
 }
 
-
 function openModal(id) {
-  document
-    .getElementById(id)
-    ?.classList.remove("hidden");
+  document.getElementById(id)?.classList.remove("hidden");
 }
-
 
 function closeModal(id) {
-  document
-    .getElementById(id)
-    ?.classList.add("hidden");
+  document.getElementById(id)?.classList.add("hidden");
 }
-
 
 document.addEventListener("click", event => {
   const close = event.target.closest("[data-close]");
-
-  if (close) {
-    closeModal(close.dataset.close);
-  }
-
-  if (event.target.classList.contains("modal")) {
-    event.target.classList.add("hidden");
-  }
+  if (close) closeModal(close.dataset.close);
+  if (event.target.classList.contains("modal")) event.target.classList.add("hidden");
 });

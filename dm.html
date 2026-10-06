@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>JASZCWEB — DMs</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-toggle" id="mobileToggle">☰</button>
+        <div class="crumb">JASZCWEB <span>/</span> Direct messages</div>
+        <div class="top-user" id="topUser"></div>
+      </header>
+
+      <section class="dm-layout">
+        <aside class="dm-sidebar">
+          <div class="dm-sidebar-head">
+            <div>
+              <div class="eyebrow">PRIVATE</div>
+              <h2>Messages</h2>
+            </div>
+            <button class="icon-btn" id="newDmBtn" title="New message">+</button>
+          </div>
+
+          <div class="dm-search-wrap">
+            <input id="dmSearch" placeholder="⌕ Search conversations..." autocomplete="off">
+          </div>
+
+          <div id="conversationList" class="conversation-list-dm"></div>
+        </aside>
+
+        <section class="dm-chat-pane">
+          <div id="dmEmpty" class="chat-empty dm-empty">
+            <div>✉</div>
+            <h3>Pick a conversation.</h3>
+            <p>Choose a person or start a new DM.</p>
+            <button class="btn primary" id="emptyNewDmBtn">New message</button>
+          </div>
+
+          <div id="dmActive" class="dm-active hidden">
+            <header class="dm-chat-header">
+              <div class="dm-person">
+                <div id="dmAvatar" class="dm-avatar">U</div>
+                <div>
+                  <h2 id="dmName">User</h2>
+                  <p id="dmUsername">@user</p>
+                </div>
+              </div>
+
+              <div class="dm-actions">
+                <button class="icon-btn" id="startCallBtn" title="Start voice call">☎</button>
+              </div>
+            </header>
+
+            <div id="dmMessages" class="dm-messages"></div>
+
+            <form id="dmForm" class="message-form">
+              <input id="dmInput" maxlength="2000" placeholder="Write a message..." autocomplete="off">
+              <button class="send-btn" type="submit">↑</button>
+            </form>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <!-- New DM modal -->
+  <div id="newDmModal" class="modal hidden">
+    <div class="modal-card dm-modal-card">
+      <button class="modal-x" data-close="newDmModal">×</button>
+      <div class="eyebrow">NEW MESSAGE</div>
+      <h2>Start a DM.</h2>
+      <p>Pick somebody from JASZCWEB.</p>
+      <input id="peopleSearch" placeholder="⌕ Search people...">
+      <div id="peopleList" class="people-list"></div>
+    </div>
+  </div>
+
+  <!-- Incoming call -->
+  <div id="incomingCallModal" class="modal hidden">
+    <div class="modal-card incoming-call-card">
+      <div class="call-avatar" id="incomingCallAvatar">U</div>
+      <div class="eyebrow">INCOMING VOICE CALL</div>
+      <h2 id="incomingCallName">Someone is calling</h2>
+      <p id="incomingCallUsername">@user</p>
+      <div class="call-buttons">
+        <button class="btn secondary" id="declineCallBtn">Decline</button>
+        <button class="btn primary" id="acceptCallBtn">Answer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active call -->
+  <div id="activeCallBar" class="active-call-bar hidden">
+    <div>
+      <strong>Voice call</strong>
+      <span id="callStatus">Connecting...</span>
+    </div>
+    <div class="active-call-actions">
+      <button class="icon-btn" id="muteCallBtn" title="Mute">🎙</button>
+      <button class="btn danger" id="hangupBtn">Hang up</button>
+    </div>
+  </div>
+
+  <audio id="remoteAudio" autoplay playsinline></audio>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/dm.js"></script>
+</body>
+</html>
