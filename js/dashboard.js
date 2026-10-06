@@ -1,1 +1,120 @@
-document.addEventListener('DOMContentLoaded',async()=>{if(!(await JC.boot(false)))return;hello.textContent=`Welcome back, ${JC.profile.display_name||'there'}.`;await loadCommunities();newCommunity.onclick=()=>openModal('communityModal');cName.oninput=()=>{if(!cSlug.dataset.edited)cSlug.value=cName.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};cSlug.oninput=()=>cSlug.dataset.edited='1';createCommunity.onclick=create;joinCommunity.onclick=join});async function loadCommunities(){const {data,error}=await JC.sb.from('community_members').select('community_id,role,communities(id,name,slug,description,accent_color)').eq('user_id',JC.user.id);if(error){communityGrid.innerHTML=`<div class="config-warning">${esc(error.message)}</div>`;return}if(!data?.length){communityGrid.innerHTML='<div class="empty"><div>◎</div><h3>No communities yet.</h3><p>Create one below and invite your people.</p></div>';return}communityGrid.innerHTML=data.map(x=>{const c=x.communities;return `<article class="community-card"><div class="community-logo">${esc(c.name[0].toUpperCase())}</div><h3>${esc(c.name)}</h3><p>${esc(c.description||'Your community.')}</p><div class="card-foot"><span>${esc(x.role)}</span><button class="btn primary small" data-id="${c.id}">Enter →</button></div></article>`}).join('');communityGrid.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>location.href=`community.html?community=${b.dataset.id}`)}async function create(){cMsg.textContent='Creating...';const {data,error}=await JC.sb.rpc('create_community',{p_name:cName.value.trim(),p_slug:cSlug.value.trim().toLowerCase(),p_description:cDesc.value.trim()});if(error){cMsg.textContent=error.message;cMsg.className='msg error';return}location.href=`community.html?community=${data}`}async function join(){const code=joinCode.value.trim();if(!code)return;const {data,error}=await JC.sb.rpc('join_community',{p_code:code});if(error){alert(error.message);return}location.href=`community.html?community=${data}`}
+document.addEventListener("DOMContentLoaded", async () => {
+  if (!(await JC.boot(false))) return;
+
+  const $ = id => document.getElementById(id);
+  const hello = $("helloTitle");
+  const grid = $("dashboardGrid");
+  const empty = $("noCommunities");
+  const createBtn = $("createCommunityBtn");
+  const emptyCreate = $("emptyCreateBtn");
+  const joinBtn = $("joinCommunityBtn");
+  const emptyJoin = $("emptyJoinBtn");
+
+  hello.textContent = `Welcome back, ${JC.profile?.display_name || "there"}.`;
+
+  createBtn?.addEventListener("click", () => openModal("communityModal"));
+  emptyCreate?.addEventListener("click", () => openModal("communityModal"));
+  joinBtn?.addEventListener("click", () => openModal("joinModal"));
+  emptyJoin?.addEventListener("click", () => openModal("joinModal"));
+
+  const name = $("communityName");
+  const slug = $("communitySlug");
+  name?.addEventListener("input", () => {
+    if (!slug.dataset.edited) {
+      slug.value = name.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+  });
+  slug?.addEventListener("input", () => { slug.dataset.edited = "1"; });
+
+  $("createCommunitySubmit")?.addEventListener("click", createCommunity);
+  $("joinCommunitySubmit")?.addEventListener("click", joinCommunity);
+
+  await loadCommunities();
+
+  async function loadCommunities() {
+    const { data, error } = await JC.sb
+      .from("community_members")
+      .select("community_id, role, banned, communities(id,name,slug,description,accent_color,banner_color)")
+      .eq("user_id", JC.user.id)
+      .eq("banned", false);
+
+    if (error) {
+      grid.innerHTML = `<div class="setup-warning">${escapeHTML(error.message)}</div>`;
+      return;
+    }
+
+    const communities = (data || []).map(row => ({ ...row.communities, role: row.role }));
+    empty.classList.toggle("hidden", communities.length > 0);
+
+    grid.innerHTML = communities.map(c => `
+      <article class="community-card">
+        <div class="community-logo">${escapeHTML((c.name || "J")[0].toUpperCase())}</div>
+        <h3>${escapeHTML(c.name)}</h3>
+        <p>${escapeHTML(c.description || "Your community.")}</p>
+        <div class="card-foot">
+          <span>${escapeHTML(c.role)}</span>
+          <button class="btn primary small" data-id="${escapeHTML(c.id)}">Enter →</button>
+        </div>
+      </article>
+    `).join("");
+
+    grid.querySelectorAll("[data-id]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        location.href = `community.html?community=${encodeURIComponent(btn.dataset.id)}`;
+      });
+    });
+  }
+
+  async function createCommunity() {
+    const msg = $("communityMsg");
+    msg.textContent = "Creating...";
+    msg.classList.remove("error");
+
+    const p_name = name.value.trim();
+    const p_slug = slug.value.trim().toLowerCase();
+    const p_description = $("communityDescription").value.trim();
+
+    if (!p_name || !p_slug) {
+      msg.textContent = "Add a name and slug.";
+      msg.classList.add("error");
+      return;
+    }
+
+    const { data, error } = await JC.sb.rpc("create_community", {
+      p_name,
+      p_slug,
+      p_description
+    });
+
+    if (error) {
+      msg.textContent = error.message;
+      msg.classList.add("error");
+      return;
+    }
+
+    location.href = `community.html?community=${encodeURIComponent(data)}`;
+  }
+
+  async function joinCommunity() {
+    const msg = $("joinMsg");
+    const code = $("joinCode").value.trim().toUpperCase();
+    msg.textContent = "Joining...";
+    msg.classList.remove("error");
+
+    if (!code) {
+      msg.textContent = "Enter an invite code.";
+      msg.classList.add("error");
+      return;
+    }
+
+    const { data, error } = await JC.sb.rpc("join_community", { p_code: code });
+
+    if (error) {
+      msg.textContent = error.message;
+      msg.classList.add("error");
+      return;
+    }
+
+    location.href = `community.html?community=${encodeURIComponent(data)}`;
+  }
+});

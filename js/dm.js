@@ -1,10 +1,233 @@
-let conversations=[],activeConversation=null,dmSubscription=null;
-document.addEventListener("DOMContentLoaded",async()=>{if(!(await JC.boot(false)))return;await loadConversations();document.getElementById("newDmBtn").addEventListener("click",()=>openModal("newDmModal"));document.getElementById("startDm").addEventListener("click",startDm);document.getElementById("dmSearch").addEventListener("input",e=>paintConversationList(e.target.value.toLowerCase()));document.getElementById("dmForm").addEventListener("submit",sendDm);});
-async function loadConversations(){const {data,error}=await JC.sb.from("direct_participants").select("conversation_id, direct_conversations(id,created_at,direct_participants(user_id,profiles(display_name,username,avatar_url)))").eq("user_id",JC.user.id);if(error){document.getElementById("conversationList").innerHTML=`<div class="setup-warning">${escapeHTML(error.message)}</div>`;return;}conversations=(data||[]).map(x=>x.direct_conversations).filter(Boolean);paintConversationList("");}
-function otherParticipant(c){return (c.direct_participants||[]).find(x=>x.user_id!==JC.user.id)?.profiles||null;}
-function paintConversationList(q){const list=conversations.filter(c=>{const p=otherParticipant(c);return !q||`${p?.display_name||""} ${p?.username||""}`.toLowerCase().includes(q);});document.getElementById("conversationList").innerHTML=list.map(c=>{const p=otherParticipant(c),name=p?.display_name||"User";return `<button class="dm-conversation ${activeConversation?.id===c.id?'active':''}" data-conv="${c.id}"><div class="message-avatar">${p?.avatar_url?`<img src="${escapeHTML(p.avatar_url)}" alt="">`:escapeHTML(name[0]?.toUpperCase()||"U")}</div><div><strong>${escapeHTML(name)}</strong><small>@${escapeHTML(p?.username||"user")}</small></div></button>`;}).join("");document.querySelectorAll("[data-conv]").forEach(b=>b.addEventListener("click",()=>openConversation(b.dataset.conv)));}
-async function startDm(){const username=document.getElementById("dmUsername").value.trim().toLowerCase();const msg=document.getElementById("dmMsg");msg.textContent="Starting...";const {data,error}=await JC.sb.rpc("create_direct_conversation",{p_username:username});if(error){msg.textContent=error.message;msg.classList.add("error");return;}closeModal("newDmModal");await loadConversations();await openConversation(data);}
-async function openConversation(id){activeConversation=conversations.find(c=>c.id===id)||{id};paintConversationList("");const p=otherParticipant(activeConversation);document.getElementById("dmChatHead").innerHTML=`<div class="dm-head-inner"><div class="message-avatar">${p?.avatar_url?`<img src="${escapeHTML(p.avatar_url)}" alt="">`:escapeHTML((p?.display_name||"U")[0])}</div><div><strong>${escapeHTML(p?.display_name||"User")}</strong><small>@${escapeHTML(p?.username||"user")}</small></div></div>`;document.getElementById("dmForm").classList.remove("hidden");if(dmSubscription){await JC.sb.removeChannel(dmSubscription);}const {data,error}=await JC.sb.from("direct_messages").select("id,conversation_id,user_id,content,created_at,profiles(display_name,username,avatar_url)").eq("conversation_id",id).order("created_at",{ascending:true}).limit(300);if(error){alert(error.message);return;}renderDmMessages(data||[]);dmSubscription=JC.sb.channel(`dm:${id}`).on("postgres_changes",{event:"INSERT",schema:"public",table:"direct_messages",filter:`conversation_id=eq.${id}`},payload=>{appendDmMessage(payload.new);}).subscribe();}
-function renderDmMessages(list){const box=document.getElementById("dmMessages");box.innerHTML="";list.forEach(appendDmMessage);box.scrollTop=box.scrollHeight;}
-async function appendDmMessage(m){const box=document.getElementById("dmMessages");if(box.querySelector(`[data-dm-id="${m.id}"]`))return;let full=m;if(!m.profiles){const {data}=await JC.sb.from("profiles").select("display_name,username,avatar_url").eq("id",m.user_id).single();full={...m,profiles:data};}const name=full.profiles?.display_name||"User",row=document.createElement("div");row.dataset.dmId=full.id;row.className=`dm-bubble ${full.user_id===JC.user.id?'mine':''}`;row.innerHTML=`<strong>${escapeHTML(name)}</strong><p>${escapeHTML(full.content)}</p><small>${new Date(full.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</small>`;box.appendChild(row);box.scrollTop=box.scrollHeight;}
-async function sendDm(e){e.preventDefault();if(!activeConversation)return;const input=document.getElementById("dmInput"),content=input.value.trim();if(!content)return;const {error}=await JC.sb.from("direct_messages").insert({conversation_id:activeConversation.id,user_id:JC.user.id,content});if(error){alert(error.message);return;}input.value="";}
+let conversations = [];
+let activeConversation = null;
+let dmSubscription = null;
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if (!(await JC.boot(false))) return;
+
+  await loadConversations();
+  document.getElementById("newDmBtn")?.addEventListener("click", () => openModal("newDmModal"));
+  document.getElementById("startDm")?.addEventListener("click", startDm);
+  document.getElementById("dmSearch")?.addEventListener("input", e => paintConversationList(e.target.value.toLowerCase()));
+  document.getElementById("dmForm")?.addEventListener("submit", sendDm);
+});
+
+async function loadConversations() {
+  const { data: mine, error } = await JC.sb
+    .from("direct_participants")
+    .select("conversation_id")
+    .eq("user_id", JC.user.id);
+
+  if (error) {
+    showDmError(error.message);
+    return;
+  }
+
+  const ids = [...new Set((mine || []).map(row => row.conversation_id))];
+
+  if (!ids.length) {
+    conversations = [];
+    paintConversationList("");
+    return;
+  }
+
+  const { data: participants, error: participantError } = await JC.sb
+    .from("direct_participants")
+    .select("conversation_id,user_id,profiles(id,display_name,username,avatar_url,status)")
+    .in("conversation_id", ids);
+
+  if (participantError) {
+    showDmError(participantError.message);
+    return;
+  }
+
+  conversations = ids.map(id => ({
+    id,
+    direct_participants: (participants || []).filter(row => row.conversation_id === id)
+  }));
+
+  paintConversationList("");
+}
+
+function showDmError(message) {
+  document.getElementById("conversationList").innerHTML = `<div class="setup-warning">${escapeHTML(message)}</div>`;
+}
+
+function otherParticipant(conversation) {
+  return (conversation?.direct_participants || [])
+    .find(row => row.user_id !== JC.user.id)?.profiles || null;
+}
+
+function paintConversationList(query) {
+  const list = conversations.filter(conversation => {
+    const p = otherParticipant(conversation);
+    const text = `${p?.display_name || ""} ${p?.username || ""}`.toLowerCase();
+    return !query || text.includes(query);
+  });
+
+  const box = document.getElementById("conversationList");
+  if (!box) return;
+
+  box.innerHTML = list.map(conversation => {
+    const p = otherParticipant(conversation);
+    const name = p?.display_name || "User";
+    return `
+      <button class="dm-conversation ${activeConversation?.id === conversation.id ? "active" : ""}" data-conv="${conversation.id}">
+        <div class="message-avatar">
+          ${p?.avatar_url ? `<img src="${escapeHTML(p.avatar_url)}" alt="">` : escapeHTML(name[0]?.toUpperCase() || "U")}
+        </div>
+        <div>
+          <strong>${escapeHTML(name)}</strong>
+          <small>@${escapeHTML(p?.username || "user")}</small>
+        </div>
+      </button>
+    `;
+  }).join("") || `<div class="dm-empty">No conversations yet.</div>`;
+
+  box.querySelectorAll("[data-conv]").forEach(button => {
+    button.addEventListener("click", () => openConversation(button.dataset.conv));
+  });
+}
+
+async function startDm() {
+  const input = document.getElementById("dmUsername");
+  const msg = document.getElementById("dmMsg");
+  const username = input.value.trim().toLowerCase();
+
+  msg.className = "form-msg";
+  msg.textContent = "Starting...";
+
+  if (!username) {
+    msg.textContent = "Enter a username.";
+    msg.classList.add("error");
+    return;
+  }
+
+  const { data, error } = await JC.sb.rpc("create_direct_conversation", {
+    p_username: username
+  });
+
+  if (error) {
+    msg.textContent = error.message;
+    msg.classList.add("error");
+    return;
+  }
+
+  closeModal("newDmModal");
+  input.value = "";
+  await loadConversations();
+  await openConversation(data);
+}
+
+async function openConversation(id) {
+  activeConversation = conversations.find(c => c.id === id) || {
+    id,
+    direct_participants: []
+  };
+
+  paintConversationList(document.getElementById("dmSearch")?.value.toLowerCase() || "");
+
+  let other = otherParticipant(activeConversation);
+  if (!other) {
+    const { data: participants } = await JC.sb
+      .from("direct_participants")
+      .select("conversation_id,user_id,profiles(id,display_name,username,avatar_url,status)")
+      .eq("conversation_id", id);
+
+    activeConversation.direct_participants = participants || [];
+    other = otherParticipant(activeConversation);
+  }
+
+  const name = other?.display_name || "User";
+  document.getElementById("dmChatHead").innerHTML = `
+    <div class="dm-head-inner">
+      <div class="message-avatar">${other?.avatar_url ? `<img src="${escapeHTML(other.avatar_url)}" alt="">` : escapeHTML(name[0]?.toUpperCase() || "U")}</div>
+      <div><strong>${escapeHTML(name)}</strong><small>@${escapeHTML(other?.username || "user")}</small></div>
+    </div>
+  `;
+
+  document.getElementById("dmForm").classList.remove("hidden");
+
+  if (dmSubscription) {
+    await JC.sb.removeChannel(dmSubscription);
+    dmSubscription = null;
+  }
+
+  await loadDmMessages(id);
+
+  dmSubscription = JC.sb
+    .channel(`dm:${id}`)
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "direct_messages",
+      filter: `conversation_id=eq.${id}`
+    }, async payload => {
+      await appendDmMessage(payload.new);
+    })
+    .subscribe();
+}
+
+async function loadDmMessages(id) {
+  const { data, error } = await JC.sb
+    .from("direct_messages")
+    .select("id,conversation_id,user_id,content,created_at")
+    .eq("conversation_id", id)
+    .order("created_at", { ascending: true })
+    .limit(300);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  const box = document.getElementById("dmMessages");
+  box.innerHTML = "";
+  for (const message of data || []) await appendDmMessage(message);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function appendDmMessage(message) {
+  const box = document.getElementById("dmMessages");
+  if (!box || box.querySelector(`[data-dm-id="${message.id}"]`)) return;
+
+  const { data: profile } = await JC.sb
+    .from("profiles")
+    .select("display_name,username,avatar_url")
+    .eq("id", message.user_id)
+    .single();
+
+  const name = profile?.display_name || "User";
+  const row = document.createElement("div");
+  row.dataset.dmId = message.id;
+  row.className = `dm-bubble ${message.user_id === JC.user.id ? "mine" : ""}`;
+  row.innerHTML = `
+    <strong>${escapeHTML(name)}</strong>
+    <p>${escapeHTML(message.content)}</p>
+    <small>${new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
+  `;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendDm(event) {
+  event.preventDefault();
+  if (!activeConversation) return;
+
+  const input = document.getElementById("dmInput");
+  const content = input.value.trim();
+  if (!content) return;
+
+  const { error } = await JC.sb.from("direct_messages").insert({
+    conversation_id: activeConversation.id,
+    user_id: JC.user.id,
+    content
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  input.value = "";
+}

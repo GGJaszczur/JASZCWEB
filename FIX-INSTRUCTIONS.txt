@@ -1,0 +1,29 @@
+JASZCWEB V2 FIXED FRONTEND
+
+THIS VERSION IS A CODE FIX, NOT A DATABASE RESET.
+
+Your existing Supabase database, accounts, communities, channels and messages are kept.
+DO NOT rerun supabase.sql or supabase-v2-upgrade.sql just to install this frontend.
+
+Install:
+1. Keep your existing js/config.js with your working Supabase URL/key.
+2. In your jaszcweb-v2 GitHub branch, replace the files in this package, preserving folders.
+3. Add any new files that are not already there.
+4. Commit changes.
+5. Hard refresh the site (Ctrl+Shift+R).
+
+Main fixes:
+- Chat loads old messages using separate profile/reaction queries, avoiding fragile nested select failures.
+- Chat subscriptions refresh cleanly and preserve existing messages.
+- DMs load conversations through explicit participant queries instead of nested conversation selects.
+- DMs can be started by username and update in realtime.
+- Profile avatar uploads use a unique storage path and update the profile row.
+- Profile preview updates safely.
+- Dashboard no longer relies on accidental browser globals like `hello` or `esc`.
+- Join/create community controls are wired explicitly.
+- Member role controls match backend permissions better.
+- Community settings respect owner/admin access.
+- Voice UI cleanup is more reliable.
+
+IMPORTANT:
+Keep js/config.js from your working project.
