@@ -3,6 +3,7 @@ let activeConversationId = null;
 let activeOtherUser = null;
 
 let dmSubscription = null;
+let dmListSubscription = null;
 
 let callChannel = null;
 let peer = null;
@@ -75,7 +76,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document
     .getElementById("muteCallBtn")
     ?.addEventListener("click", toggleMute);
-
 });
 
 
@@ -90,50 +90,42 @@ async function loadConversations() {
     error
   } = await JC.sb
     .from("dm_conversations")
-    .select(
-      "id,user_a,user_b,created_at"
-    )
+    .select("id,user_a,user_b,created_at")
     .or(
       `user_a.eq.${JC.user.id},user_b.eq.${JC.user.id}`
     )
-    .order(
-      "created_at",
-      {
-        ascending: false
-      }
-    );
-
+    .order("created_at", {
+      ascending: false
+    });
 
   if (error) {
 
-    showConversationError(
-      error.message
+    console.error(
+      "Conversation loading error:",
+      error
     );
+
+    showConversationError(error.message);
 
     return;
   }
 
-
   conversations = data || [];
 
-
-  const otherIds =
-    conversations.map(conversation => {
-
-      return conversation.user_a === JC.user.id
-        ? conversation.user_b
-        : conversation.user_a;
-
-    });
-
+  const otherIds = conversations.map(conversation =>
+    conversation.user_a === JC.user.id
+      ? conversation.user_b
+      : conversation.user_a
+  );
 
   if (!otherIds.length) {
 
     renderConversationList();
 
+    await subscribeToConversationList();
+
     return;
   }
-
 
   const {
     data: profiles,
@@ -143,62 +135,50 @@ async function loadConversations() {
     .select(
       "id,username,display_name,avatar_url"
     )
-    .in(
-      "id",
-      otherIds
-    );
-
+    .in("id", otherIds);
 
   if (profileError) {
     console.error(
-      "DM profile loading error:",
+      "Profile loading error:",
       profileError
     );
   }
 
+  const profileMap = new Map(
+    (profiles || []).map(profile => [
+      profile.id,
+      profile
+    ])
+  );
 
-  const profileMap =
-    new Map(
-      (profiles || []).map(profile => [
-        profile.id,
-        profile
-      ])
-    );
+  conversations = conversations.map(conversation => {
 
+    const otherId =
+      conversation.user_a === JC.user.id
+        ? conversation.user_b
+        : conversation.user_a;
 
-  conversations =
-    conversations.map(conversation => {
+    return {
+      ...conversation,
 
-      const otherId =
-        conversation.user_a === JC.user.id
-          ? conversation.user_b
-          : conversation.user_a;
+      other:
+        profileMap.get(otherId) || {
+          id: otherId,
+          display_name: "User",
+          username: "user",
+          avatar_url: null
+        }
+    };
 
-
-      return {
-        ...conversation,
-
-        other:
-          profileMap.get(otherId) || {
-            id: otherId,
-            display_name: "User",
-            username: "user",
-            avatar_url: null
-          }
-      };
-
-    });
-
+  });
 
   renderConversationList();
 
   await subscribeToConversationList();
 
-
   const wantedUser =
     new URLSearchParams(location.search)
       .get("user");
-
 
   if (wantedUser) {
 
@@ -207,7 +187,6 @@ async function loadConversations() {
         conversation =>
           conversation.other.id === wantedUser
       );
-
 
     if (existingConversation) {
 
@@ -222,9 +201,7 @@ async function loadConversations() {
       );
 
     }
-
   }
-
 }
 
 
@@ -239,9 +216,7 @@ function renderConversationList() {
       "conversationList"
     );
 
-
   if (!box) return;
-
 
   const search =
     (
@@ -252,33 +227,28 @@ function renderConversationList() {
       .trim()
       .toLowerCase();
 
-
   const filtered =
-    conversations.filter(
-      conversation => {
+    conversations.filter(conversation => {
 
-        const name =
-          (
-            conversation.other
-              ?.display_name || ""
-          ).toLowerCase();
+      const name =
+        (
+          conversation.other?.display_name ||
+          ""
+        ).toLowerCase();
 
-        const username =
-          (
-            conversation.other
-              ?.username || ""
-          ).toLowerCase();
+      const username =
+        (
+          conversation.other?.username ||
+          ""
+        ).toLowerCase();
 
+      return (
+        !search ||
+        name.includes(search) ||
+        username.includes(search)
+      );
 
-        return (
-          !search ||
-          name.includes(search) ||
-          username.includes(search)
-        );
-
-      }
-    );
-
+    });
 
   if (!filtered.length) {
 
@@ -292,96 +262,90 @@ function renderConversationList() {
     return;
   }
 
-
   box.innerHTML =
-    filtered.map(
-      conversation => {
+    filtered.map(conversation => {
 
-        const other =
-          conversation.other;
+      const other =
+        conversation.other;
 
+      let avatarHTML;
 
-        let avatarHTML = "";
+      if (other?.avatar_url) {
 
-
-        if (other?.avatar_url) {
-
-          avatarHTML = `
-            <img
-              src="${escapeHTML(
-                other.avatar_url
-              )}"
-              alt=""
-              style="
-                width:40px;
-                height:40px;
-                min-width:40px;
-                max-width:40px;
-                min-height:40px;
-                max-height:40px;
-                object-fit:cover;
-                object-position:center;
-                border-radius:50%;
-                display:block;
-              "
-            >
-          `;
-
-        } else {
-
-          avatarHTML = `
-            <span>
-              ${escapeHTML(
-                (
-                  other?.display_name ||
-                  "U"
-                )[0].toUpperCase()
-              )}
-            </span>
-          `;
-
-        }
-
-
-        return `
-          <button
-            class="dm-conversation ${
-              conversation.id ===
-              activeConversationId
-                ? "active"
-                : ""
-            }"
-            data-conversation="${conversation.id}"
+        avatarHTML = `
+          <img
+            src="${escapeHTML(
+              other.avatar_url
+            )}"
+            alt=""
+            width="40"
+            height="40"
+            style="
+              width:40px !important;
+              height:40px !important;
+              min-width:40px !important;
+              max-width:40px !important;
+              min-height:40px !important;
+              max-height:40px !important;
+              object-fit:cover !important;
+              object-position:center !important;
+              border-radius:50% !important;
+              display:block !important;
+            "
           >
+        `;
 
-            <div class="dm-list-avatar">
-              ${avatarHTML}
-            </div>
+      } else {
 
-            <div class="dm-list-text">
-
-              <strong>
-                ${escapeHTML(
-                  other?.display_name ||
-                  "User"
-                )}
-              </strong>
-
-              <small>
-                @${escapeHTML(
-                  other?.username ||
-                  "user"
-                )}
-              </small>
-
-            </div>
-
-          </button>
+        avatarHTML = `
+          <span>
+            ${escapeHTML(
+              (
+                other?.display_name ||
+                "U"
+              )[0].toUpperCase()
+            )}
+          </span>
         `;
 
       }
-    ).join("");
 
+      return `
+        <button
+          class="dm-conversation ${
+            conversation.id === activeConversationId
+              ? "active"
+              : ""
+          }"
+          data-conversation="${conversation.id}"
+        >
+
+          <div class="dm-list-avatar">
+            ${avatarHTML}
+          </div>
+
+          <div class="dm-list-text">
+
+            <strong>
+              ${escapeHTML(
+                other?.display_name ||
+                "User"
+              )}
+            </strong>
+
+            <small>
+              @${escapeHTML(
+                other?.username ||
+                "user"
+              )}
+            </small>
+
+          </div>
+
+        </button>
+      `;
+
+    }).join("");
 
   box
     .querySelectorAll(
@@ -391,17 +355,13 @@ function renderConversationList() {
 
       button.addEventListener(
         "click",
-        () => {
-
+        () =>
           openConversation(
             button.dataset.conversation
-          );
-
-        }
+          )
       );
 
     });
-
 }
 
 
@@ -431,7 +391,6 @@ async function preparePeopleModal() {
     )
     .limit(200);
 
-
   if (error) {
 
     console.error(
@@ -444,13 +403,10 @@ async function preparePeopleModal() {
     return;
   }
 
-
   window.jcPeople =
     data || [];
 
-
   renderPeople();
-
 }
 
 
@@ -461,9 +417,7 @@ function renderPeople() {
       "peopleList"
     );
 
-
   if (!box) return;
-
 
   const search =
     (
@@ -473,7 +427,6 @@ function renderPeople() {
     )
       .trim()
       .toLowerCase();
-
 
   const people =
     (
@@ -492,7 +445,6 @@ function renderPeople() {
           ""
         ).toLowerCase();
 
-
       return (
         !search ||
         name.includes(search) ||
@@ -500,7 +452,6 @@ function renderPeople() {
       );
 
     });
-
 
   if (!people.length) {
 
@@ -514,12 +465,10 @@ function renderPeople() {
     return;
   }
 
-
   box.innerHTML =
     people.map(person => {
 
-      let avatarHTML = "";
-
+      let avatarHTML;
 
       if (person.avatar_url) {
 
@@ -529,17 +478,19 @@ function renderPeople() {
               person.avatar_url
             )}"
             alt=""
+            width="38"
+            height="38"
             style="
-              width:38px;
-              height:38px;
-              min-width:38px;
-              max-width:38px;
-              min-height:38px;
-              max-height:38px;
-              object-fit:cover;
-              object-position:center;
-              border-radius:50%;
-              display:block;
+              width:38px !important;
+              height:38px !important;
+              min-width:38px !important;
+              max-width:38px !important;
+              min-height:38px !important;
+              max-height:38px !important;
+              object-fit:cover !important;
+              object-position:center !important;
+              border-radius:50% !important;
+              display:block !important;
             "
           >
         `;
@@ -558,7 +509,6 @@ function renderPeople() {
         `;
 
       }
-
 
       return `
         <button
@@ -592,8 +542,7 @@ function renderPeople() {
       `;
 
     }).join("");
-
-
+  
   box
     .querySelectorAll(
       "[data-user]"
@@ -602,17 +551,13 @@ function renderPeople() {
 
       button.addEventListener(
         "click",
-        () => {
-
+        () =>
           createConversation(
             button.dataset.user
-          );
-
-        }
+          )
       );
 
     });
-
 }
 
 
@@ -623,18 +568,15 @@ function openPeopleModal() {
       "peopleSearch"
     );
 
-
   if (search) {
     search.value = "";
   }
-
 
   renderPeople();
 
   openModal(
     "newDmModal"
   );
-
 }
 
 
@@ -650,7 +592,6 @@ async function createConversation(
     return;
   }
 
-
   const {
     data,
     error
@@ -662,34 +603,29 @@ async function createConversation(
     }
   );
 
-
   if (error) {
-
-    alert(
-      error.message
-    );
 
     console.error(
       "Create DM error:",
       error
     );
 
+    alert(
+      error.message
+    );
+
     return;
   }
-
 
   closeModal(
     "newDmModal"
   );
 
-
   await loadConversations();
-
 
   await openConversation(
     data
   );
-
 }
 
 
@@ -704,42 +640,37 @@ async function openConversation(
         conversationId
     );
 
-
   if (!conversation) {
     return;
   }
 
-
   activeConversationId =
     conversationId;
-
 
   activeOtherUser =
     conversation.other;
 
-
   renderConversationList();
-
 
   document
     .getElementById("dmEmpty")
-    ?.classList.add("hidden");
-
+    ?.classList.add(
+      "hidden"
+    );
 
   document
     .getElementById("dmActive")
-    ?.classList.remove("hidden");
-
+    ?.classList.remove(
+      "hidden"
+    );
 
   paintActivePerson();
-
 
   await loadDMMessages();
 
   await subscribeToDM();
 
   await setupCallChannel();
-
 }
 
 
@@ -753,17 +684,14 @@ function paintActivePerson() {
     return;
   }
 
-
   const avatar =
     document.getElementById(
       "dmAvatar"
     );
 
-
   const name =
     activeOtherUser.display_name ||
     "User";
-
 
   if (activeOtherUser.avatar_url) {
 
@@ -773,17 +701,19 @@ function paintActivePerson() {
           activeOtherUser.avatar_url
         )}"
         alt=""
+        width="46"
+        height="46"
         style="
-          width:46px;
-          height:46px;
-          min-width:46px;
-          max-width:46px;
-          min-height:46px;
-          max-height:46px;
-          object-fit:cover;
-          object-position:center;
-          border-radius:50%;
-          display:block;
+          width:46px !important;
+          height:46px !important;
+          min-width:46px !important;
+          max-width:46px !important;
+          min-height:46px !important;
+          max-height:46px !important;
+          object-fit:cover !important;
+          object-position:center !important;
+          border-radius:50% !important;
+          display:block !important;
         "
       >
     `;
@@ -796,23 +726,20 @@ function paintActivePerson() {
 
   }
 
-
   document.getElementById(
     "dmName"
   ).textContent =
     name;
 
-
   document.getElementById(
     "dmUsername"
   ).textContent =
     `@${activeOtherUser.username || "user"}`;
-
 }
 
 
 /* =========================================================
-   LOAD DM MESSAGES
+   LOAD MESSAGES
    ========================================================= */
 
 async function loadDMMessages() {
@@ -837,15 +764,12 @@ async function loadDMMessages() {
     )
     .limit(300);
 
-
   const box =
     document.getElementById(
       "dmMessages"
     );
 
-
   if (!box) return;
-
 
   if (error) {
 
@@ -865,9 +789,7 @@ async function loadDMMessages() {
     return;
   }
 
-
   box.innerHTML = "";
-
 
   if (!(data || []).length) {
 
@@ -888,16 +810,14 @@ async function loadDMMessages() {
     return;
   }
 
-
   data.forEach(
     appendDMMessage
   );
-
 }
 
 
 /* =========================================================
-   REALTIME DM SUBSCRIPTION
+   REALTIME DM
    ========================================================= */
 
 async function subscribeToDM() {
@@ -908,10 +828,9 @@ async function subscribeToDM() {
       dmSubscription
     );
 
-    dmSubscription = null;
-
+    dmSubscription =
+      null;
   }
-
 
   dmSubscription =
     JC.sb
@@ -936,7 +855,6 @@ async function subscribeToDM() {
         }
       )
       .subscribe();
-
 }
 
 
@@ -953,15 +871,10 @@ function appendDMMessage(
       "dmMessages"
     );
 
-
-  if (!box) {
-    return;
-  }
-
+  if (!box) return;
 
   const messageId =
     message.id;
-
 
   if (
     box.querySelector(
@@ -971,50 +884,33 @@ function appendDMMessage(
     return;
   }
 
-
   if (
     box.querySelector(
       ".chat-empty"
     )
   ) {
-
     box.innerHTML = "";
-
   }
-
-
-  /*
-    Your database has user_id as the
-    required sender column.
-
-    We support sender_id too because
-    the repair migration added it.
-  */
 
   const senderId =
     message.user_id ||
     message.sender_id;
 
-
   const mine =
     senderId === JC.user.id;
-
 
   const row =
     document.createElement(
       "div"
     );
 
-
   row.className =
     `dm-message ${
       mine ? "mine" : ""
     }`;
 
-
   row.dataset.dmId =
     messageId;
-
 
   const time =
     new Date(
@@ -1026,7 +922,6 @@ function appendDMMessage(
         minute: "2-digit"
       }
     );
-
 
   row.innerHTML = `
     <div class="dm-bubble">
@@ -1044,15 +939,12 @@ function appendDMMessage(
     </div>
   `;
 
-
   box.appendChild(
     row
   );
 
-
   box.scrollTop =
     box.scrollHeight;
-
 }
 
 
@@ -1066,37 +958,30 @@ async function sendDM(
 
   event.preventDefault();
 
-
   if (!activeConversationId) {
     return;
   }
-
 
   const input =
     document.getElementById(
       "dmInput"
     );
 
-
   if (!input) {
     return;
   }
 
-
   const content =
     input.value.trim();
-
 
   if (!content) {
     return;
   }
 
-
   /*
     IMPORTANT:
-    Your table requires user_id.
-    We send BOTH user_id and sender_id
-    so the current database schema works.
+    Your current database requires user_id.
+    We send user_id AND sender_id.
   */
 
   const {
@@ -1104,6 +989,7 @@ async function sendDM(
   } = await JC.sb
     .from("direct_messages")
     .insert({
+
       conversation_id:
         activeConversationId,
 
@@ -1116,7 +1002,6 @@ async function sendDM(
       content:
         content
     });
-
 
   if (error) {
 
@@ -1132,26 +1017,22 @@ async function sendDM(
     return;
   }
 
-
   input.value = "";
-
   input.focus();
-
 }
 
 
 /* =========================================================
-   NEW CONVERSATION REALTIME
+   CONVERSATION REALTIME
    ========================================================= */
 
 async function subscribeToConversationList() {
 
-  /*
-    Don't create multiple listeners.
-  */
+  if (dmListSubscription) {
+    return;
+  }
 
-  JC.dmListSubscription =
-    JC.dmListSubscription ||
+  dmListSubscription =
     JC.sb
       .channel(
         `dm-list-${JC.user.id}`
@@ -1170,7 +1051,6 @@ async function subscribeToConversationList() {
         }
       )
       .subscribe();
-
 }
 
 
@@ -1184,23 +1064,20 @@ async function setupCallChannel() {
     return;
   }
 
-
   if (callChannel) {
 
     await JC.sb.removeChannel(
       callChannel
     );
 
-    callChannel = null;
-
+    callChannel =
+      null;
   }
-
 
   callChannel =
     JC.sb.channel(
       `voice-${activeConversationId}`
     );
-
 
   callChannel
 
@@ -1218,13 +1095,10 @@ async function setupCallChannel() {
           return;
         }
 
-
         pendingOffer =
           payload.offer;
 
-
         showIncomingCall();
-
       }
     )
 
@@ -1242,11 +1116,9 @@ async function setupCallChannel() {
           return;
         }
 
-
         if (!peer) {
           return;
         }
-
 
         try {
 
@@ -1256,9 +1128,7 @@ async function setupCallChannel() {
             )
           );
 
-
           await flushCandidates();
-
 
           setCallStatus(
             "Connected"
@@ -1267,12 +1137,11 @@ async function setupCallChannel() {
         } catch (error) {
 
           console.error(
-            "Answer handling error:",
+            "Answer error:",
             error
           );
 
         }
-
       }
     )
 
@@ -1290,13 +1159,11 @@ async function setupCallChannel() {
           return;
         }
 
-
         if (
           !payload.candidate
         ) {
           return;
         }
-
 
         if (
           !peer ||
@@ -1308,9 +1175,7 @@ async function setupCallChannel() {
           );
 
           return;
-
         }
-
 
         try {
 
@@ -1323,12 +1188,11 @@ async function setupCallChannel() {
         } catch (error) {
 
           console.error(
-            "ICE candidate error:",
+            "ICE error:",
             error
           );
 
         }
-
       }
     )
 
@@ -1346,14 +1210,11 @@ async function setupCallChannel() {
           return;
         }
 
-
         hangup(false);
-
       }
     )
 
     .subscribe();
-
 }
 
 
@@ -1367,13 +1228,11 @@ async function startVoiceCall() {
     return;
   }
 
-
   try {
 
     await setupCallChannel();
 
     await createPeerConnection();
-
 
     localStream =
       await navigator.mediaDevices
@@ -1382,34 +1241,27 @@ async function startVoiceCall() {
           video: false
         });
 
-
     localStream
       .getTracks()
-      .forEach(
-        track => {
+      .forEach(track => {
 
-          peer.addTrack(
-            track,
-            localStream
-          );
+        peer.addTrack(
+          track,
+          localStream
+        );
 
-        }
-      );
-
+      });
 
     const offer =
       await peer.createOffer();
-
 
     await peer.setLocalDescription(
       offer
     );
 
-
     showActiveCall(
       "Calling..."
     );
-
 
     await callChannel.send({
 
@@ -1438,21 +1290,17 @@ async function startVoiceCall() {
       error
     );
 
-
     alert(
-      "Couldn't start the call. Check your microphone permission."
+      "Couldn't start the call. Check microphone permissions."
     );
 
-
     await hangup(false);
-
   }
-
 }
 
 
 /* =========================================================
-   ACCEPT CALL
+   ACCEPT VOICE CALL
    ========================================================= */
 
 async function acceptIncomingCall() {
@@ -1461,18 +1309,15 @@ async function acceptIncomingCall() {
     return;
   }
 
-
   closeModal(
     "incomingCallModal"
   );
-
 
   try {
 
     await setupCallChannel();
 
     await createPeerConnection();
-
 
     localStream =
       await navigator.mediaDevices
@@ -1481,20 +1326,16 @@ async function acceptIncomingCall() {
           video: false
         });
 
-
     localStream
       .getTracks()
-      .forEach(
-        track => {
+      .forEach(track => {
 
-          peer.addTrack(
-            track,
-            localStream
-          );
+        peer.addTrack(
+          track,
+          localStream
+        );
 
-        }
-      );
-
+      });
 
     await peer.setRemoteDescription(
       new RTCSessionDescription(
@@ -1502,23 +1343,18 @@ async function acceptIncomingCall() {
       )
     );
 
-
     await flushCandidates();
-
 
     const answer =
       await peer.createAnswer();
-
 
     await peer.setLocalDescription(
       answer
     );
 
-
     showActiveCall(
       "Connected"
     );
-
 
     await callChannel.send({
 
@@ -1540,7 +1376,6 @@ async function acceptIncomingCall() {
 
     });
 
-
     pendingOffer =
       null;
 
@@ -1551,16 +1386,12 @@ async function acceptIncomingCall() {
       error
     );
 
-
     alert(
-      "Couldn't answer the call. Check your microphone permission."
+      "Couldn't answer the call. Check microphone permissions."
     );
 
-
     await hangup(false);
-
   }
-
 }
 
 
@@ -1575,7 +1406,6 @@ async function createPeerConnection() {
       rtcConfig
     );
 
-
   peer.ontrack =
     event => {
 
@@ -1584,22 +1414,17 @@ async function createPeerConnection() {
           "remoteAudio"
         );
 
-
       if (!remoteAudio) {
         return;
       }
 
-
       remoteAudio.srcObject =
         event.streams[0];
-
 
       remoteAudio
         .play()
         .catch(() => {});
-
     };
-
 
   peer.onicecandidate =
     async event => {
@@ -1610,7 +1435,6 @@ async function createPeerConnection() {
       ) {
         return;
       }
-
 
       await callChannel.send({
 
@@ -1631,9 +1455,7 @@ async function createPeerConnection() {
         }
 
       });
-
     };
-
 
   peer.onconnectionstatechange =
     () => {
@@ -1642,22 +1464,8 @@ async function createPeerConnection() {
         return;
       }
 
-
       const state =
         peer.connectionState;
-
-
-      if (
-        state ===
-        "connected"
-      ) {
-
-        setCallStatus(
-          "Connected"
-        );
-
-      }
-
 
       if (
         state ===
@@ -1670,18 +1478,16 @@ async function createPeerConnection() {
 
       }
 
-
       if (
         state ===
-        "failed"
+        "connected"
       ) {
 
         setCallStatus(
-          "Connection failed"
+          "Connected"
         );
 
       }
-
 
       if (
         state ===
@@ -1694,13 +1500,22 @@ async function createPeerConnection() {
 
       }
 
-    };
+      if (
+        state ===
+        "failed"
+      ) {
 
+        setCallStatus(
+          "Connection failed"
+        );
+
+      }
+    };
 }
 
 
 /* =========================================================
-   ICE QUEUE
+   ICE CANDIDATES
    ========================================================= */
 
 async function flushCandidates() {
@@ -1711,7 +1526,6 @@ async function flushCandidates() {
   ) {
     return;
   }
-
 
   for (
     const candidate
@@ -1734,12 +1548,9 @@ async function flushCandidates() {
       );
 
     }
-
   }
 
-
   pendingCandidates = [];
-
 }
 
 
@@ -1753,17 +1564,14 @@ function showIncomingCall() {
     activeOtherUser?.display_name ||
     "Someone";
 
-
   const username =
     activeOtherUser?.username ||
     "user";
-
 
   const avatar =
     document.getElementById(
       "incomingCallAvatar"
     );
-
 
   if (avatar) {
 
@@ -1777,16 +1585,18 @@ function showIncomingCall() {
             activeOtherUser.avatar_url
           )}"
           alt=""
+          width="64"
+          height="64"
           style="
-            width:64px;
-            height:64px;
-            min-width:64px;
-            max-width:64px;
-            min-height:64px;
-            max-height:64px;
-            object-fit:cover;
-            border-radius:50%;
-            display:block;
+            width:64px !important;
+            height:64px !important;
+            min-width:64px !important;
+            max-width:64px !important;
+            min-height:64px !important;
+            max-height:64px !important;
+            object-fit:cover !important;
+            border-radius:50% !important;
+            display:block !important;
           "
         >
       `;
@@ -1798,26 +1608,21 @@ function showIncomingCall() {
         "U";
 
     }
-
   }
-
 
   document.getElementById(
     "incomingCallName"
   ).textContent =
     `${name} is calling`;
 
-
   document.getElementById(
     "incomingCallUsername"
   ).textContent =
     `@${username}`;
 
-
   openModal(
     "incomingCallModal"
   );
-
 }
 
 
@@ -1827,15 +1632,13 @@ function declineIncomingCall() {
     "incomingCallModal"
   );
 
-
   pendingOffer =
     null;
-
 }
 
 
 /* =========================================================
-   ACTIVE CALL UI
+   CALL UI
    ========================================================= */
 
 function showActiveCall(
@@ -1850,11 +1653,9 @@ function showActiveCall(
       "hidden"
     );
 
-
   setCallStatus(
     status
   );
-
 }
 
 
@@ -1867,12 +1668,10 @@ function setCallStatus(
       "callStatus"
     );
 
-
   if (element) {
     element.textContent =
       status;
   }
-
 }
 
 
@@ -1886,25 +1685,20 @@ function toggleMute() {
     return;
   }
 
-
   const track =
     localStream.getAudioTracks()[0];
-
 
   if (!track) {
     return;
   }
 
-
   track.enabled =
     !track.enabled;
-
 
   const button =
     document.getElementById(
       "muteCallBtn"
     );
-
 
   if (button) {
 
@@ -1914,7 +1708,6 @@ function toggleMute() {
         : "🔇";
 
   }
-
 }
 
 
@@ -1953,14 +1746,12 @@ async function hangup(
     } catch (error) {
 
       console.error(
-        "Hangup notify error:",
+        "Hangup error:",
         error
       );
 
     }
-
   }
-
 
   if (localStream) {
 
@@ -1973,9 +1764,7 @@ async function hangup(
 
     localStream =
       null;
-
   }
-
 
   if (peer) {
 
@@ -1989,28 +1778,23 @@ async function hangup(
 
     peer =
       null;
-
   }
-
 
   const remoteAudio =
     document.getElementById(
       "remoteAudio"
     );
 
-
   if (remoteAudio) {
     remoteAudio.srcObject =
       null;
   }
-
 
   pendingOffer =
     null;
 
   pendingCandidates =
     [];
-
 
   document
     .getElementById(
@@ -2020,23 +1804,20 @@ async function hangup(
       "hidden"
     );
 
-
   const muteButton =
     document.getElementById(
       "muteCallBtn"
     );
 
-
   if (muteButton) {
     muteButton.textContent =
       "🎙";
   }
-
 }
 
 
 /* =========================================================
-   ERROR UI
+   ERROR
    ========================================================= */
 
 function showConversationError(
@@ -2048,16 +1829,13 @@ function showConversationError(
       "conversationList"
     );
 
-
   if (!box) {
     return;
   }
-
 
   box.innerHTML = `
     <div class="setup-warning">
       ${escapeHTML(message)}
     </div>
   `;
-
 }
