@@ -4,48 +4,99 @@ let adminCommunities = [];
 document.addEventListener("DOMContentLoaded", async () => {
   injectAdminButtonStyles();
 
-  if (!JC.initClient()) return;
+  if (!JC.initClient()) {
+    return;
+  }
 
   const user = await JC.requireAuth();
-  if (!user) return;
+
+  if (!user) {
+    return;
+  }
 
   const allowed = await checkAdminAccess();
 
   if (!allowed) {
     document.body.innerHTML = `
-      <div style="min-height:100vh;display:grid;place-items:center;background:#08090c;color:#fff;font-family:system-ui;padding:20px;text-align:center">
+      <div style="
+        min-height:100vh;
+        display:grid;
+        place-items:center;
+        background:#08090c;
+        color:#fff;
+        font-family:system-ui;
+        padding:20px;
+        text-align:center;
+      ">
         <div>
-          <div style="font-size:56px">🔒</div>
+          <div style="font-size:56px;">🔒</div>
+
           <h1>Admin access required</h1>
-          <p style="color:#999">This account is not a platform administrator.</p>
-          <a href="dashboard.html" style="color:#c8ff38">Back to JASZCWEB</a>
+
+          <p style="color:#999;">
+            This account is not a platform administrator.
+          </p>
+
+          <a
+            href="dashboard.html"
+            style="color:#c8ff38;"
+          >
+            Back to JASZCWEB
+          </a>
         </div>
       </div>
     `;
+
     return;
   }
 
-  document.getElementById("adminUser").textContent =
-    `${JC.profile?.display_name || "Admin"} · Administrator`;
+  const adminUserElement =
+    document.getElementById("adminUser");
 
-  document.getElementById("systemEmail").textContent =
-    JC.user.email || "—";
+  if (adminUserElement) {
+    adminUserElement.textContent =
+      `${JC.profile?.display_name || "Admin"} · Administrator`;
+  }
+
+  const systemEmailElement =
+    document.getElementById("systemEmail");
+
+  if (systemEmailElement) {
+    systemEmailElement.textContent =
+      JC.user.email || "—";
+  }
 
   setupNavigation();
 
-  document.getElementById("adminLogout")?.addEventListener("click", async () => {
-    await JC.sb.auth.signOut();
-    location.href = "index.html";
-  });
+  document
+    .getElementById("adminLogout")
+    ?.addEventListener("click", async () => {
+      await JC.sb.auth.signOut();
+      location.href = "index.html";
+    });
 
-  document.getElementById("userSearch")?.addEventListener("input", renderUsers);
-  document.getElementById("communitySearch")?.addEventListener("input", renderCommunities);
+  document
+    .getElementById("userSearch")
+    ?.addEventListener("input", renderUsers);
+
+  document
+    .getElementById("communitySearch")
+    ?.addEventListener(
+      "input",
+      renderCommunities
+    );
 
   await refreshStats();
   await loadUsers();
   await loadCommunities();
+
   buildMessageModeration();
 });
+
+
+/* =========================================================
+   ADMIN ACCESS
+========================================================= */
 
 async function checkAdminAccess() {
   const { data, error } = await JC.sb
@@ -55,35 +106,61 @@ async function checkAdminAccess() {
     .single();
 
   if (error) {
-    console.error("Admin access check:", error);
+    console.error(
+      "Admin access check:",
+      error
+    );
+
     return false;
   }
 
-  return data?.is_admin === true && data?.is_banned !== true;
+  return (
+    data?.is_admin === true &&
+    data?.is_banned !== true
+  );
 }
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
 
 function setupNavigation() {
-  document.querySelectorAll(".admin-nav,.admin-action").forEach(button => {
-    button.addEventListener("click", () => {
-      showSection(button.dataset.section);
+  document
+    .querySelectorAll(
+      ".admin-nav,.admin-action"
+    )
+    .forEach(button => {
+      button.addEventListener(
+        "click",
+        () => {
+          showSection(
+            button.dataset.section
+          );
+        }
+      );
     });
-  });
 }
 
-function showSection(section) {
-  document.querySelectorAll(".admin-section").forEach(sectionEl => {
-    sectionEl.classList.toggle(
-      "active",
-      sectionEl.id === `${section}Section`
-    );
-  });
 
-  document.querySelectorAll(".admin-nav").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.section === section
-    );
-  });
+function showSection(section) {
+  document
+    .querySelectorAll(".admin-section")
+    .forEach(sectionEl => {
+      sectionEl.classList.toggle(
+        "active",
+        sectionEl.id === `${section}Section`
+      );
+    });
+
+  document
+    .querySelectorAll(".admin-nav")
+    .forEach(button => {
+      button.classList.toggle(
+        "active",
+        button.dataset.section === section
+      );
+    });
 
   const titles = {
     overview: "Overview",
@@ -93,80 +170,187 @@ function showSection(section) {
     system: "System"
   };
 
-  document.getElementById("adminPageTitle").textContent =
-    titles[section] || "Overview";
+  const title =
+    document.getElementById(
+      "adminPageTitle"
+    );
+
+  if (title) {
+    title.textContent =
+      titles[section] || "Overview";
+  }
 }
 
+
+/* =========================================================
+   STATS
+========================================================= */
+
 async function refreshStats() {
-  const [users, communities, messages, dms] = await Promise.all([
+  const [
+    users,
+    communities,
+    messages,
+    dms
+  ] = await Promise.all([
     countRows("profiles"),
     countRows("communities"),
     countRows("messages"),
     countRows("direct_messages")
   ]);
 
-  document.getElementById("statUsers").textContent = users;
-  document.getElementById("statCommunities").textContent = communities;
-  document.getElementById("statMessages").textContent = messages;
-  document.getElementById("statDMs").textContent = dms;
-  document.getElementById("messageBig").textContent = messages;
-  document.getElementById("dmBig").textContent = dms;
+  const statUsers =
+    document.getElementById(
+      "statUsers"
+    );
+
+  const statCommunities =
+    document.getElementById(
+      "statCommunities"
+    );
+
+  const statMessages =
+    document.getElementById(
+      "statMessages"
+    );
+
+  const statDMs =
+    document.getElementById(
+      "statDMs"
+    );
+
+  const messageBig =
+    document.getElementById(
+      "messageBig"
+    );
+
+  const dmBig =
+    document.getElementById(
+      "dmBig"
+    );
+
+  if (statUsers) {
+    statUsers.textContent = users;
+  }
+
+  if (statCommunities) {
+    statCommunities.textContent =
+      communities;
+  }
+
+  if (statMessages) {
+    statMessages.textContent =
+      messages;
+  }
+
+  if (statDMs) {
+    statDMs.textContent = dms;
+  }
+
+  if (messageBig) {
+    messageBig.textContent =
+      messages;
+  }
+
+  if (dmBig) {
+    dmBig.textContent = dms;
+  }
 }
 
+
 async function countRows(table) {
-  const { count, error } = await JC.sb
-    .from(table)
-    .select("*", {
-      count: "exact",
-      head: true
-    });
+  const { count, error } =
+    await JC.sb
+      .from(table)
+      .select("*", {
+        count: "exact",
+        head: true
+      });
 
   if (error) {
-    console.error(`Count ${table}:`, error);
+    console.error(
+      `Count ${table}:`,
+      error
+    );
+
     return "—";
   }
 
   return count ?? 0;
 }
 
+
+/* =========================================================
+   USERS
+========================================================= */
+
 async function loadUsers() {
-  const { data, error } = await JC.sb
-    .from("profiles")
-    .select(
-      "id,username,display_name,is_admin,is_banned,suspended_until,created_at"
-    )
-    .order("created_at", {
-      ascending: false
-    })
-    .limit(500);
+  const { data, error } =
+    await JC.sb.rpc(
+      "admin_list_users"
+    );
 
   if (error) {
-    showError("usersTable", error.message);
+    console.error(
+      "Admin users:",
+      error
+    );
+
+    showError(
+      "usersTable",
+      error.message
+    );
+
     return;
   }
 
-  adminUsers = data || [];
+  adminUsers =
+    Array.isArray(data)
+      ? data
+      : [];
+
   renderUsers();
 }
 
+
 function renderUsers() {
-  const box = document.getElementById("usersTable");
-  if (!box) return;
+  const box =
+    document.getElementById(
+      "usersTable"
+    );
+
+  if (!box) {
+    return;
+  }
 
   const q = (
-    document.getElementById("userSearch")?.value || ""
-  ).trim().toLowerCase();
+    document.getElementById(
+      "userSearch"
+    )?.value || ""
+  )
+    .trim()
+    .toLowerCase();
 
-  const users = adminUsers.filter(user => {
-    const name = (user.display_name || "").toLowerCase();
-    const username = (user.username || "").toLowerCase();
+  const users =
+    adminUsers.filter(user => {
+      const name =
+        (
+          user.display_name ||
+          ""
+        ).toLowerCase();
 
-    return (
-      !q ||
-      name.includes(q) ||
-      username.includes(q)
-    );
-  });
+      const username =
+        (
+          user.username ||
+          ""
+        ).toLowerCase();
+
+      return (
+        !q ||
+        name.includes(q) ||
+        username.includes(q)
+      );
+    });
 
   box.innerHTML = `
     <div class="admin-table-row head">
@@ -181,16 +365,38 @@ function renderUsers() {
       users.map(user => {
         const suspended =
           user.suspended_until &&
-          new Date(user.suspended_until) > new Date();
+          new Date(
+            user.suspended_until
+          ) > new Date();
 
-        const status = user.is_banned
-          ? `<span style="color:#ff6666">BANNED</span>`
-          : suspended
-            ? `<span style="color:#ffd166">SUSPENDED</span>`
-            : `<span style="color:#52e0a0">ACTIVE</span>`;
+        let status = "";
+
+        if (user.is_banned) {
+          status = `
+            <span style="color:#ff6666;">
+              BANNED
+            </span>
+          `;
+        } else if (suspended) {
+          status = `
+            <span style="color:#ffd166;">
+              SUSPENDED
+            </span>
+          `;
+        } else {
+          status = `
+            <span style="color:#52e0a0;">
+              ACTIVE
+            </span>
+          `;
+        }
 
         const role = user.is_admin
-          ? `<span style="color:#c8ff38">ADMIN</span>`
+          ? `
+            <span style="color:#c8ff38;">
+              ADMIN
+            </span>
+          `
           : "USER";
 
         const cannotLockSelf =
@@ -201,23 +407,42 @@ function renderUsers() {
 
             <span>
               <strong>
-                ${escapeHTML(user.display_name || "User")}
+                ${escapeHTML(
+                  user.display_name ||
+                  "User"
+                )}
               </strong>
 
               <small>
-                @${escapeHTML(user.username || "user")}
+                @${escapeHTML(
+                  user.username ||
+                  "user"
+                )}
               </small>
             </span>
 
             <span>
-              ${escapeHTML(user.username || "user")}
+              ${escapeHTML(
+                user.username ||
+                "user"
+              )}
             </span>
 
-            <span>${status}</span>
+            <span>
+              ${status}
+            </span>
 
-            <span>${role}</span>
+            <span>
+              ${role}
+            </span>
 
-            <span style="display:flex;gap:5px;flex-wrap:wrap">
+            <span
+              style="
+                display:flex;
+                gap:5px;
+                flex-wrap:wrap;
+              "
+            >
 
               ${
                 user.is_admin
@@ -292,41 +517,73 @@ function renderUsers() {
             </span>
           </div>
         `;
-      }).join("") || `
+      }).join("")
+
+      || `
         <div class="admin-table-row">
-          <span>No users found.</span>
+          <span>
+            No users found.
+          </span>
         </div>
       `
     }
   `;
 
   box
-    .querySelectorAll("[data-user-action]")
+    .querySelectorAll(
+      "[data-user-action]"
+    )
     .forEach(button => {
-      button.addEventListener("click", () => {
-        runUserAction(
-          button.dataset.userAction,
-          button.dataset.id
-        );
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          runUserAction(
+            button.dataset.userAction,
+            button.dataset.id
+          );
+        }
+      );
     });
 }
 
-async function runUserAction(action, userId) {
+
+async function runUserAction(
+  action,
+  userId
+) {
   const labels = {
-    promote: "Make this user an administrator?",
-    demote: "Remove administrator access?",
-    suspend: "Suspend this user for 24 hours?",
-    unsuspend: "Remove this user's suspension?",
-    ban: "Ban this user?",
-    unban: "Unban this user?"
+    promote:
+      "Make this user an administrator?",
+
+    demote:
+      "Remove administrator access?",
+
+    suspend:
+      "Suspend this user for 24 hours?",
+
+    unsuspend:
+      "Remove this user's suspension?",
+
+    ban:
+      "Ban this user?",
+
+    unban:
+      "Unban this user?"
   };
 
-  if (!confirm(labels[action] || "Confirm this action?")) {
+  if (
+    !confirm(
+      labels[action] ||
+      "Confirm this action?"
+    )
+  ) {
     return;
   }
 
-  const { data, error } = await JC.sb.rpc(
+  const {
+    data,
+    error
+  } = await JC.sb.rpc(
     "admin_manage_user",
     {
       p_user_id: userId,
@@ -340,7 +597,11 @@ async function runUserAction(action, userId) {
   }
 
   if (!data?.success) {
-    alert(data?.message || "Admin action failed.");
+    alert(
+      data?.message ||
+      "Admin action failed."
+    );
+
     return;
   }
 
@@ -348,75 +609,56 @@ async function runUserAction(action, userId) {
   await refreshStats();
 }
 
+
+/* =========================================================
+   COMMUNITIES
+========================================================= */
+
 async function loadCommunities() {
-  /*
-    IMPORTANT:
-    Do NOT use profiles(...) here.
-
-    Your communities table has multiple relationships
-    to profiles, so PostgREST cannot guess which one
-    should be used.
-  */
-
-  const { data, error } = await JC.sb
-    .from("communities")
-    .select(
-      "id,name,slug,owner_id,is_locked,created_at"
-    )
-    .order("created_at", {
-      ascending: false
-    })
-    .limit(500);
+  const { data, error } =
+    await JC.sb.rpc(
+      "admin_list_communities"
+    );
 
   if (error) {
-    showError("communitiesTable", error.message);
+    console.error(
+      "Admin communities:",
+      error
+    );
+
+    showError(
+      "communitiesTable",
+      error.message
+    );
+
     return;
   }
 
-  const ownerIds = [
-    ...new Set(
-      (data || [])
-        .map(row => row.owner_id)
-        .filter(Boolean)
-    )
-  ];
+  const communities =
+    Array.isArray(data)
+      ? data
+      : [];
 
-  let ownerMap = new Map();
+  adminCommunities =
+    communities.map(
+      community => ({
+        ...community,
 
-  if (ownerIds.length) {
-    const {
-      data: owners,
-      error: ownerError
-    } = await JC.sb
-      .from("profiles")
-      .select(
-        "id,display_name,username"
-      )
-      .in("id", ownerIds);
+        owner: {
+          display_name:
+            community.owner_display_name ||
+            "Unknown",
 
-    if (ownerError) {
-      console.error(
-        "Owner loading:",
-        ownerError
-      );
-    } else {
-      ownerMap = new Map(
-        (owners || []).map(owner => [
-          owner.id,
-          owner
-        ])
-      );
-    }
-  }
-
-  adminCommunities = (data || []).map(community => ({
-    ...community,
-    owner:
-      ownerMap.get(community.owner_id) || null
-  }));
+          username:
+            community.owner_username ||
+            "unknown"
+        }
+      })
+    );
 
   renderCommunities();
 }
+
 
 function renderCommunities() {
   const box =
@@ -424,28 +666,40 @@ function renderCommunities() {
       "communitiesTable"
     );
 
-  if (!box) return;
+  if (!box) {
+    return;
+  }
 
   const q = (
     document.getElementById(
       "communitySearch"
     )?.value || ""
-  ).trim().toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
 
   const communities =
-    adminCommunities.filter(community => {
-      const name =
-        (community.name || "").toLowerCase();
+    adminCommunities.filter(
+      community => {
+        const name =
+          (
+            community.name ||
+            ""
+          ).toLowerCase();
 
-      const slug =
-        (community.slug || "").toLowerCase();
+        const slug =
+          (
+            community.slug ||
+            ""
+          ).toLowerCase();
 
-      return (
-        !q ||
-        name.includes(q) ||
-        slug.includes(q)
-      );
-    });
+        return (
+          !q ||
+          name.includes(q) ||
+          slug.includes(q)
+        );
+      }
+    );
 
   box.innerHTML = `
     <div class="admin-table-row head">
@@ -457,76 +711,99 @@ function renderCommunities() {
     </div>
 
     ${
-      communities.map(community => `
-        <div class="admin-table-row">
+      communities.map(
+        community => `
+          <div class="admin-table-row">
 
-          <span>
-            <strong>
-              ${escapeHTML(community.name)}
-            </strong>
+            <span>
+              <strong>
+                ${escapeHTML(
+                  community.name ||
+                  "Unnamed community"
+                )}
+              </strong>
 
-            <small>
-              /${escapeHTML(community.slug)}
-            </small>
-          </span>
+              <small>
+                /${escapeHTML(
+                  community.slug ||
+                  ""
+                )}
+              </small>
+            </span>
 
-          <span>
-            ${escapeHTML(
-              community.owner?.display_name ||
-              "Unknown"
-            )}
-          </span>
+            <span>
+              ${escapeHTML(
+                community.owner
+                  ?.display_name ||
+                "Unknown"
+              )}
+            </span>
 
-          <span>
-            ${
-              community.is_locked
-                ? `
-                  <span style="color:#ffd166">
-                    LOCKED
-                  </span>
-                `
-                : `
-                  <span style="color:#52e0a0">
-                    OPEN
-                  </span>
-                `
-            }
-          </span>
-
-          <span>
-            ${formatDate(
-              community.created_at
-            )}
-          </span>
-
-          <span style="display:flex;gap:5px;flex-wrap:wrap">
-
-            <button
-              class="admin-inline-btn"
-              data-community-action="toggle-lock"
-              data-id="${community.id}"
-            >
+            <span>
               ${
                 community.is_locked
-                  ? "Unlock"
-                  : "Lock"
+                  ? `
+                    <span
+                      style="color:#ffd166;"
+                    >
+                      LOCKED
+                    </span>
+                  `
+                  : `
+                    <span
+                      style="color:#52e0a0;"
+                    >
+                      OPEN
+                    </span>
+                  `
               }
-            </button>
+            </span>
 
-            <button
-              class="admin-inline-btn danger"
-              data-community-action="delete"
-              data-id="${community.id}"
+            <span>
+              ${formatDate(
+                community.created_at
+              )}
+            </span>
+
+            <span
+              style="
+                display:flex;
+                gap:5px;
+                flex-wrap:wrap;
+              "
             >
-              Delete
-            </button>
 
-          </span>
+              <button
+                class="admin-inline-btn"
+                data-community-action="toggle-lock"
+                data-id="${community.id}"
+              >
+                ${
+                  community.is_locked
+                    ? "Unlock"
+                    : "Lock"
+                }
+              </button>
 
-        </div>
-      `).join("") || `
+              <button
+                class="admin-inline-btn danger"
+                data-community-action="delete"
+                data-id="${community.id}"
+              >
+                Delete
+              </button>
+
+            </span>
+
+          </div>
+        `
+      ).join("")
+
+      || `
         <div class="admin-table-row">
-          <span>No communities found.</span>
+          <span>
+            No communities found.
+          </span>
         </div>
       `
     }
@@ -537,31 +814,75 @@ function renderCommunities() {
       "[data-community-action]"
     )
     .forEach(button => {
-      button.addEventListener("click", () => {
-        runCommunityAction(
-          button.dataset.communityAction,
-          button.dataset.id
-        );
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          runCommunityAction(
+            button.dataset.communityAction,
+            button.dataset.id
+          );
+        }
+      );
     });
 }
+
 
 async function runCommunityAction(
   action,
   communityId
 ) {
-  const message =
-    action === "delete"
-      ? "Delete this community and its content?"
-      : "Change this community's lock status?";
+  let actualAction = action;
 
-  if (!confirm(message)) return;
+  /*
+    The button uses toggle-lock,
+    but the SQL function accepts
+    lock / unlock / delete.
+  */
 
-  const { data, error } = await JC.sb.rpc(
+  if (action === "toggle-lock") {
+    const community =
+      adminCommunities.find(
+        item =>
+          String(item.id) ===
+          String(communityId)
+      );
+
+    actualAction =
+      community?.is_locked
+        ? "unlock"
+        : "lock";
+  }
+
+  let message = "";
+
+  if (actualAction === "delete") {
+    message =
+      "Delete this community and its content?";
+  } else if (
+    actualAction === "lock"
+  ) {
+    message =
+      "Lock this community?";
+  } else {
+    message =
+      "Unlock this community?";
+  }
+
+  if (!confirm(message)) {
+    return;
+  }
+
+  const {
+    data,
+    error
+  } = await JC.sb.rpc(
     "admin_manage_community",
     {
-      p_community_id: communityId,
-      p_action: action
+      p_community_id:
+        communityId,
+
+      p_action:
+        actualAction
     }
   );
 
@@ -575,6 +896,7 @@ async function runCommunityAction(
       data?.message ||
       "Community action failed."
     );
+
     return;
   }
 
@@ -582,25 +904,46 @@ async function runCommunityAction(
   await refreshStats();
 }
 
+
+/* =========================================================
+   MESSAGE MODERATION
+========================================================= */
+
 function buildMessageModeration() {
   const section =
     document.getElementById(
       "messagesSection"
     );
 
-  if (!section) return;
+  if (!section) {
+    return;
+  }
 
   const grid =
     section.querySelector(
       ".admin-grid"
     );
 
-  if (!grid) return;
+  if (!grid) {
+    return;
+  }
+
+  const existing =
+    document.getElementById(
+      "adminModerationPanel"
+    );
+
+  if (existing) {
+    existing.remove();
+  }
 
   const panel =
     document.createElement(
       "div"
     );
+
+  panel.id =
+    "adminModerationPanel";
 
   panel.className =
     "admin-panel";
@@ -610,9 +953,13 @@ function buildMessageModeration() {
 
   panel.innerHTML = `
     <div class="admin-panel-head">
-      <h2>Recent community messages</h2>
+      <h2>
+        Recent community messages
+      </h2>
+
       <p>
-        Delete messages directly from the platform.
+        Delete messages directly
+        from the platform.
       </p>
     </div>
 
@@ -624,31 +971,42 @@ function buildMessageModeration() {
   loadRecentMessages();
 }
 
+
 async function loadRecentMessages() {
   const box =
     document.getElementById(
       "moderationMessages"
     );
 
-  if (!box) return;
+  if (!box) {
+    return;
+  }
 
-  const { data, error } = await JC.sb
+  const {
+    data,
+    error
+  } = await JC.sb
     .from("messages")
     .select(
       "id,content,created_at,user_id,channel_id"
     )
-    .order("created_at", {
-      ascending: false
-    })
+    .order(
+      "created_at",
+      {
+        ascending: false
+      }
+    )
     .limit(100);
 
   if (error) {
     box.innerHTML = `
       <div
         class="setup-warning"
-        style="margin:15px"
+        style="margin:15px;"
       >
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>
     `;
 
@@ -665,45 +1023,64 @@ async function loadRecentMessages() {
     </div>
 
     ${
-      (data || []).map(message => `
+      (data || [])
+        .map(message => {
+          const userId =
+            message.user_id
+              ? String(
+                  message.user_id
+                )
+              : "unknown";
+
+          return `
+            <div class="admin-table-row">
+
+              <span>
+                ${escapeHTML(
+                  (
+                    message.content ||
+                    ""
+                  ).slice(0, 80)
+                )}
+              </span>
+
+              <span>
+                ${escapeHTML(
+                  userId.slice(0, 8)
+                )}...
+              </span>
+
+              <span>
+                ${formatDate(
+                  message.created_at
+                )}
+              </span>
+
+              <span>
+                ${escapeHTML(
+                  message.id
+                )}
+              </span>
+
+              <span>
+                <button
+                  class="admin-inline-btn danger"
+                  data-delete-message="${message.id}"
+                >
+                  Delete
+                </button>
+              </span>
+
+            </div>
+          `;
+        })
+        .join("")
+
+      || `
         <div class="admin-table-row">
-
           <span>
-            ${escapeHTML(
-              (message.content || "")
-                .slice(0, 80)
-            )}
+            No messages.
           </span>
-
-          <span>
-            ${escapeHTML(
-              message.user_id.slice(0, 8)
-            )}...
-          </span>
-
-          <span>
-            ${formatDate(
-              message.created_at
-            )}
-          </span>
-
-          <span>
-            ${message.id}
-          </span>
-
-          <span>
-            <button
-              class="admin-inline-btn danger"
-              data-delete-message="${message.id}"
-            >
-              Delete
-            </button>
-          </span>
-
-        </div>
-      `).join("") || `
-        <div class="admin-table-row">
-          <span>No messages.</span>
         </div>
       `
     }
@@ -717,21 +1094,27 @@ async function loadRecentMessages() {
       button.addEventListener(
         "click",
         async () => {
-          if (!confirm("Delete this message?")) {
+          if (
+            !confirm(
+              "Delete this message?"
+            )
+          ) {
             return;
           }
 
-          const { data, error } =
-            await JC.sb.rpc(
-              "admin_delete_message",
-              {
-                p_message_id:
-                  Number(
-                    button.dataset
-                      .deleteMessage
-                  )
-              }
-            );
+          const {
+            data,
+            error
+          } = await JC.sb.rpc(
+            "admin_delete_message",
+            {
+              p_message_id:
+                Number(
+                  button.dataset
+                    .deleteMessage
+                )
+            }
+          );
 
           if (error) {
             alert(error.message);
@@ -743,6 +1126,7 @@ async function loadRecentMessages() {
               data?.message ||
               "Delete failed."
             );
+
             return;
           }
 
@@ -752,6 +1136,11 @@ async function loadRecentMessages() {
       );
     });
 }
+
+
+/* =========================================================
+   STYLING
+========================================================= */
 
 function injectAdminButtonStyles() {
   if (
@@ -763,41 +1152,56 @@ function injectAdminButtonStyles() {
   }
 
   const style =
-    document.createElement("style");
+    document.createElement(
+      "style"
+    );
 
   style.id =
     "jaszcweb-admin-inline-styles";
 
   style.textContent = `
-    .admin-inline-btn{
-      border:1px solid #272b35;
-      background:#151820;
-      color:#aeb4bf;
-      border-radius:7px;
-      padding:7px 9px;
-      font-size:9px;
-      cursor:pointer;
-      white-space:nowrap;
+    .admin-inline-btn {
+      border: 1px solid #272b35;
+      background: #151820;
+      color: #aeb4bf;
+      border-radius: 7px;
+      padding: 7px 9px;
+      font-size: 9px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition:
+        border-color 0.15s ease,
+        color 0.15s ease,
+        background 0.15s ease;
     }
 
-    .admin-inline-btn:hover{
-      color:#f4f6f8;
-      border-color:#c8ff38;
+    .admin-inline-btn:hover {
+      color: #f4f6f8;
+      border-color: #c8ff38;
     }
 
-    .admin-inline-btn.accent:hover{
-      color:#c8ff38;
-      border-color:#c8ff38;
+    .admin-inline-btn.accent:hover {
+      color: #c8ff38;
+      border-color: #c8ff38;
     }
 
-    .admin-inline-btn.danger:hover{
-      color:#ff6666;
-      border-color:#ff6666;
+    .admin-inline-btn.danger:hover {
+      color: #ff6666;
+      border-color: #ff6666;
+    }
+
+    .admin-inline-btn:active {
+      transform: translateY(1px);
     }
   `;
 
   document.head.appendChild(style);
 }
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function showError(
   elementId,
@@ -808,31 +1212,61 @@ function showError(
       elementId
     );
 
-  if (!element) return;
+  if (!element) {
+    return;
+  }
 
   element.innerHTML = `
     <div
       class="setup-warning"
-      style="margin:15px"
+      style="margin:15px;"
     >
       ${escapeHTML(message)}
     </div>
   `;
 }
 
-function formatDate(value) {
-  if (!value) return "—";
 
-  return new Date(
-    value
-  ).toLocaleString();
+function formatDate(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "—";
+  }
+
+  return date.toLocaleString();
 }
+
 
 function escapeHTML(value = "") {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
