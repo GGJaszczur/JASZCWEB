@@ -1,25 +1,838 @@
-let adminUsers=[];let adminCommunities=[];let pendingAction=null;
+let adminUsers = [];
+let adminCommunities = [];
 
-document.addEventListener("DOMContentLoaded",async()=>{if(!JC.initClient())return;const user=await JC.requireAuth();if(!user)return;if(!await isAdmin()){deny();return}document.getElementById("adminUser").textContent=`${JC.profile?.display_name||"Admin"} · Administrator`;document.getElementById("systemEmail").textContent=JC.user.email||"—";nav();confirmSetup();await overview();await users();await communities();await messages();await announcements();bind();});
+document.addEventListener("DOMContentLoaded", async () => {
+  injectAdminButtonStyles();
 
-async function isAdmin(){const{data,error}=await JC.sb.from("profiles").select("is_admin,is_banned").eq("id",JC.user.id).single();return !error&&data?.is_admin===true&&!data?.is_banned}
-function deny(){document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;background:#08090c;color:#fff;font-family:system-ui;text-align:center;padding:20px"><div><div style="font-size:52px">🔒</div><h1>Admin access required</h1><a href="dashboard.html" style="color:#c8ff38">Back to JASZCWEB</a></div></div>`}
-function bind(){document.querySelectorAll(".admin-nav,.admin-action").forEach(b=>b.addEventListener("click",()=>show(b.dataset.section)));document.getElementById("userSearch")?.addEventListener("input",renderUsers);document.getElementById("communitySearch")?.addEventListener("input",renderCommunities);document.getElementById("refreshMessages")?.addEventListener("click",messages);document.getElementById("publishAnnouncement")?.addEventListener("click",publish);document.getElementById("adminLogout")?.addEventListener("click",async()=>{await JC.sb.auth.signOut();location.href="index.html"})}
-function nav(){document.querySelectorAll(".admin-nav").forEach(b=>b.addEventListener("click",()=>show(b.dataset.section)))}
-function show(section){document.querySelectorAll(".admin-section").forEach(s=>s.classList.toggle("active",s.id===section+"Section"));document.querySelectorAll(".admin-nav").forEach(b=>b.classList.toggle("active",b.dataset.section===section));document.getElementById("adminPageTitle").textContent={overview:"Overview",users:"Users",communities:"Communities",messages:"Messages",announcements:"Announcements",system:"System"}[section]||"Overview"}
-function confirmSetup(){document.getElementById("confirmAction")?.addEventListener("click",async()=>{if(!pendingAction)return;const m=document.getElementById("confirmMsg");try{await pendingAction();pendingAction=null;closeModal("confirmModal")}catch(e){m.className="form-msg error";m.textContent=e.message}})}
-function ask(title,body,fn){pendingAction=fn;document.getElementById("confirmTitle").textContent=title;document.getElementById("confirmBody").textContent=body;document.getElementById("confirmMsg").textContent="";openModal("confirmModal")}
-async function overview(){const vals=await Promise.all([count("profiles"),count("communities"),count("messages"),count("direct_messages")]);["statUsers","statCommunities","statMessages","statDMs"].forEach((id,i)=>document.getElementById(id).textContent=vals[i])}
-async function count(t){const{count,error}=await JC.sb.from(t).select("*",{count:"exact",head:true});return error?"—":count??0}
-async function users(){const{data,error}=await JC.sb.from("profiles").select("id,username,display_name,is_admin,is_banned,suspended_until,created_at").order("created_at",{ascending:false}).limit(500);if(error)return tableErr("usersTable",error.message);adminUsers=data||[];renderUsers()}
-function renderUsers(){const q=(document.getElementById("userSearch")?.value||"").toLowerCase().trim();const list=adminUsers.filter(u=>!q||(u.display_name||"").toLowerCase().includes(q)||(u.username||"").toLowerCase().includes(q));document.getElementById("usersTable").innerHTML=`<div class="admin-table-row head"><span>User</span><span>Username</span><span>Status</span><span>Role</span><span>Actions</span></div>${list.map(u=>{const suspended=u.suspended_until&&new Date(u.suspended_until)>new Date();return `<div class="admin-table-row"><span><strong>${esc(u.display_name||"User")}</strong><small>${esc((u.id||"").slice(0,8))}...</small></span><span>@${esc(u.username||"user")}</span><span>${u.is_banned?'<span class="row-status bad">BANNED</span>':suspended?'<span class="row-status warn">SUSPENDED</span>':'<span class="row-status ok">ACTIVE</span>'}</span><span>${u.is_admin?'<span class="role-admin">ADMIN</span>':'USER'}</span><span class="row-actions">${u.is_admin?`<button class="row-btn" data-user-act="demote" data-id="${u.id}">Remove admin</button>`:`<button class="row-btn" data-user-act="promote" data-id="${u.id}">Make admin</button>`}${suspended?`<button class="row-btn" data-user-act="unsuspend" data-id="${u.id}">Unsuspend</button>`:`<button class="row-btn" data-user-act="suspend" data-id="${u.id}">Suspend</button>`}${u.is_banned?`<button class="row-btn" data-user-act="unban" data-id="${u.id}">Unban</button>`:`<button class="row-btn danger" data-user-act="ban" data-id="${u.id}">Ban</button>`}</span></div>`}).join("")||'<div class="admin-table-row"><span>No users found.</span></div>'}`;document.querySelectorAll("[data-user-act]").forEach(b=>b.addEventListener("click",()=>userAction(b.dataset.userAct,b.dataset.id)))}
-function userAction(action,id){if(id===JC.user.id&&["demote","ban","suspend"].includes(action)){alert("You cannot lock your own admin account.");return}const title={promote:"Make user an admin?",demote:"Remove admin access?",suspend:"Suspend for 24 hours?",unsuspend:"Remove suspension?",ban:"Ban this user?",unban:"Unban this user?"}[action];ask(title,"This action is enforced by the database.",async()=>{const{data,error}=await JC.sb.rpc("admin_manage_user",{p_user_id:id,p_action:action});if(error)throw error;if(!data?.success)throw Error(data?.message||"Action failed");await users();await overview()})}
-async function communities(){const{data,error}=await JC.sb.from("communities").select("id,name,slug,owner_id,is_locked,created_at,profiles(display_name,username)").order("created_at",{ascending:false}).limit(500);if(error)return tableErr("communitiesTable",error.message);adminCommunities=data||[];renderCommunities()}
-function renderCommunities(){const q=(document.getElementById("communitySearch")?.value||"").toLowerCase().trim();const list=adminCommunities.filter(c=>!q||(c.name||"").toLowerCase().includes(q)||(c.slug||"").toLowerCase().includes(q));document.getElementById("communitiesTable").innerHTML=`<div class="admin-table-row head"><span>Community</span><span>Owner</span><span>Status</span><span>Created</span><span>Actions</span></div>${list.map(c=>`<div class="admin-table-row"><span><strong>${esc(c.name)}</strong><small>/${esc(c.slug)}</small></span><span>${esc(c.profiles?.display_name||"Unknown")}</span><span>${c.is_locked?'<span class="row-status warn">LOCKED</span>':'<span class="row-status ok">OPEN</span>'}</span><span>${fmt(c.created_at)}</span><span class="row-actions"><button class="row-btn" data-com-act="lock" data-id="${c.id}">${c.is_locked?"Unlock":"Lock"}</button><button class="row-btn danger" data-com-act="delete" data-id="${c.id}">Delete</button></span></div>`).join("")||'<div class="admin-table-row"><span>No communities found.</span></div>'}`;document.querySelectorAll("[data-com-act]").forEach(b=>b.addEventListener("click",()=>communityAction(b.dataset.comAct,b.dataset.id)))}
-function communityAction(action,id){ask(action==="delete"?"Delete community?":"Toggle community lock?","The action is performed by a protected database function.",async()=>{const{data,error}=await JC.sb.rpc("admin_manage_community",{p_community_id:id,p_action:action});if(error)throw error;if(!data?.success)throw Error(data?.message||"Action failed");await communities();await overview()})}
-async function messages(){const{data,error}=await JC.sb.from("messages").select("id,content,created_at,user_id,profiles(display_name,username),channels(name,communities(name))").order("created_at",{ascending:false}).limit(100);if(error)return tableErr("messagesTable",error.message);document.getElementById("messagesTable").innerHTML=`<div class="admin-table-row head"><span>Message</span><span>Author</span><span>Community</span><span>Time</span><span>Actions</span></div>${(data||[]).map(m=>`<div class="admin-table-row"><span title="${esc(m.content||"")}"><strong>${esc((m.content||"").slice(0,60))}</strong></span><span>@${esc(m.profiles?.username||"user")}</span><span>${esc(m.channels?.communities?.name||"—")}<small>#${esc(m.channels?.name||"unknown")}</small></span><span>${fmt(m.created_at)}</span><span><button class="row-btn danger" data-del-msg="${m.id}">Delete</button></span></div>`).join("")||'<div class="admin-table-row"><span>No messages.</span></div>'}`;document.querySelectorAll("[data-del-msg]").forEach(b=>b.addEventListener("click",()=>ask("Delete message?","The message will be permanently removed.",async()=>{const{data,error}=await JC.sb.rpc("admin_delete_message",{p_message_id:Number(b.dataset.delMsg)});if(error)throw error;if(!data?.success)throw Error(data?.message||"Delete failed");await messages();await overview()})))}
-async function announcements(){const{data,error}=await JC.sb.from("platform_announcements").select("id,title,body,severity,created_at,profiles(display_name)").eq("active",true).order("created_at",{ascending:false}).limit(30);if(error)return tableErr("announcementList",error.message);document.getElementById("announcementList").innerHTML=(data||[]).map(a=>`<div class="announcement-item"><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p><div class="announcement-meta">${esc(a.severity)} · ${fmt(a.created_at)} · ${esc(a.profiles?.display_name||"Admin")}</div></div>`).join("")||'<div class="announcement-item"><p>No active announcements.</p></div>'}
-async function publish(){const title=document.getElementById("announcementTitle").value.trim();const body=document.getElementById("announcementBody").value.trim();const severity=document.getElementById("announcementSeverity").value;const msg=document.getElementById("announcementMsg");if(!title||!body){msg.className="form-msg error";msg.textContent="Add title and message.";return}try{const{data,error}=await JC.sb.rpc("admin_publish_announcement",{p_title:title,p_body:body,p_severity:severity});if(error)throw error;if(!data?.success)throw Error(data?.message||"Publish failed");msg.className="form-msg";msg.textContent="Published.";document.getElementById("announcementTitle").value="";document.getElementById("announcementBody").value="";await announcements()}catch(e){msg.className="form-msg error";msg.textContent=e.message}}
-function tableErr(id,msg){document.getElementById(id).innerHTML=`<div class="setup-warning" style="margin:15px">${esc(msg)}</div>`}
-function fmt(v){return v?new Date(v).toLocaleString():"—"}
-function esc(v=""){return String(v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+  if (!JC.initClient()) return;
+
+  const user = await JC.requireAuth();
+  if (!user) return;
+
+  const allowed = await checkAdminAccess();
+
+  if (!allowed) {
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:grid;place-items:center;background:#08090c;color:#fff;font-family:system-ui;padding:20px;text-align:center">
+        <div>
+          <div style="font-size:56px">🔒</div>
+          <h1>Admin access required</h1>
+          <p style="color:#999">This account is not a platform administrator.</p>
+          <a href="dashboard.html" style="color:#c8ff38">Back to JASZCWEB</a>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  document.getElementById("adminUser").textContent =
+    `${JC.profile?.display_name || "Admin"} · Administrator`;
+
+  document.getElementById("systemEmail").textContent =
+    JC.user.email || "—";
+
+  setupNavigation();
+
+  document.getElementById("adminLogout")?.addEventListener("click", async () => {
+    await JC.sb.auth.signOut();
+    location.href = "index.html";
+  });
+
+  document.getElementById("userSearch")?.addEventListener("input", renderUsers);
+  document.getElementById("communitySearch")?.addEventListener("input", renderCommunities);
+
+  await refreshStats();
+  await loadUsers();
+  await loadCommunities();
+  buildMessageModeration();
+});
+
+async function checkAdminAccess() {
+  const { data, error } = await JC.sb
+    .from("profiles")
+    .select("is_admin,is_banned")
+    .eq("id", JC.user.id)
+    .single();
+
+  if (error) {
+    console.error("Admin access check:", error);
+    return false;
+  }
+
+  return data?.is_admin === true && data?.is_banned !== true;
+}
+
+function setupNavigation() {
+  document.querySelectorAll(".admin-nav,.admin-action").forEach(button => {
+    button.addEventListener("click", () => {
+      showSection(button.dataset.section);
+    });
+  });
+}
+
+function showSection(section) {
+  document.querySelectorAll(".admin-section").forEach(sectionEl => {
+    sectionEl.classList.toggle(
+      "active",
+      sectionEl.id === `${section}Section`
+    );
+  });
+
+  document.querySelectorAll(".admin-nav").forEach(button => {
+    button.classList.toggle(
+      "active",
+      button.dataset.section === section
+    );
+  });
+
+  const titles = {
+    overview: "Overview",
+    users: "Users",
+    communities: "Communities",
+    messages: "Messages",
+    system: "System"
+  };
+
+  document.getElementById("adminPageTitle").textContent =
+    titles[section] || "Overview";
+}
+
+async function refreshStats() {
+  const [users, communities, messages, dms] = await Promise.all([
+    countRows("profiles"),
+    countRows("communities"),
+    countRows("messages"),
+    countRows("direct_messages")
+  ]);
+
+  document.getElementById("statUsers").textContent = users;
+  document.getElementById("statCommunities").textContent = communities;
+  document.getElementById("statMessages").textContent = messages;
+  document.getElementById("statDMs").textContent = dms;
+  document.getElementById("messageBig").textContent = messages;
+  document.getElementById("dmBig").textContent = dms;
+}
+
+async function countRows(table) {
+  const { count, error } = await JC.sb
+    .from(table)
+    .select("*", {
+      count: "exact",
+      head: true
+    });
+
+  if (error) {
+    console.error(`Count ${table}:`, error);
+    return "—";
+  }
+
+  return count ?? 0;
+}
+
+async function loadUsers() {
+  const { data, error } = await JC.sb
+    .from("profiles")
+    .select(
+      "id,username,display_name,is_admin,is_banned,suspended_until,created_at"
+    )
+    .order("created_at", {
+      ascending: false
+    })
+    .limit(500);
+
+  if (error) {
+    showError("usersTable", error.message);
+    return;
+  }
+
+  adminUsers = data || [];
+  renderUsers();
+}
+
+function renderUsers() {
+  const box = document.getElementById("usersTable");
+  if (!box) return;
+
+  const q = (
+    document.getElementById("userSearch")?.value || ""
+  ).trim().toLowerCase();
+
+  const users = adminUsers.filter(user => {
+    const name = (user.display_name || "").toLowerCase();
+    const username = (user.username || "").toLowerCase();
+
+    return (
+      !q ||
+      name.includes(q) ||
+      username.includes(q)
+    );
+  });
+
+  box.innerHTML = `
+    <div class="admin-table-row head">
+      <span>User</span>
+      <span>Username</span>
+      <span>Status</span>
+      <span>Role</span>
+      <span>Actions</span>
+    </div>
+
+    ${
+      users.map(user => {
+        const suspended =
+          user.suspended_until &&
+          new Date(user.suspended_until) > new Date();
+
+        const status = user.is_banned
+          ? `<span style="color:#ff6666">BANNED</span>`
+          : suspended
+            ? `<span style="color:#ffd166">SUSPENDED</span>`
+            : `<span style="color:#52e0a0">ACTIVE</span>`;
+
+        const role = user.is_admin
+          ? `<span style="color:#c8ff38">ADMIN</span>`
+          : "USER";
+
+        const cannotLockSelf =
+          user.id === JC.user.id;
+
+        return `
+          <div class="admin-table-row">
+
+            <span>
+              <strong>
+                ${escapeHTML(user.display_name || "User")}
+              </strong>
+
+              <small>
+                @${escapeHTML(user.username || "user")}
+              </small>
+            </span>
+
+            <span>
+              ${escapeHTML(user.username || "user")}
+            </span>
+
+            <span>${status}</span>
+
+            <span>${role}</span>
+
+            <span style="display:flex;gap:5px;flex-wrap:wrap">
+
+              ${
+                user.is_admin
+                  ? `
+                    <button
+                      class="admin-inline-btn"
+                      data-user-action="demote"
+                      data-id="${user.id}"
+                    >
+                      Remove admin
+                    </button>
+                  `
+                  : `
+                    <button
+                      class="admin-inline-btn accent"
+                      data-user-action="promote"
+                      data-id="${user.id}"
+                    >
+                      Make admin
+                    </button>
+                  `
+              }
+
+              ${
+                cannotLockSelf
+                  ? ""
+                  : suspended
+                    ? `
+                      <button
+                        class="admin-inline-btn"
+                        data-user-action="unsuspend"
+                        data-id="${user.id}"
+                      >
+                        Unsuspend
+                      </button>
+                    `
+                    : `
+                      <button
+                        class="admin-inline-btn"
+                        data-user-action="suspend"
+                        data-id="${user.id}"
+                      >
+                        Suspend
+                      </button>
+                    `
+              }
+
+              ${
+                cannotLockSelf
+                  ? ""
+                  : user.is_banned
+                    ? `
+                      <button
+                        class="admin-inline-btn accent"
+                        data-user-action="unban"
+                        data-id="${user.id}"
+                      >
+                        Unban
+                      </button>
+                    `
+                    : `
+                      <button
+                        class="admin-inline-btn danger"
+                        data-user-action="ban"
+                        data-id="${user.id}"
+                      >
+                        Ban
+                      </button>
+                    `
+              }
+
+            </span>
+          </div>
+        `;
+      }).join("") || `
+        <div class="admin-table-row">
+          <span>No users found.</span>
+        </div>
+      `
+    }
+  `;
+
+  box
+    .querySelectorAll("[data-user-action]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        runUserAction(
+          button.dataset.userAction,
+          button.dataset.id
+        );
+      });
+    });
+}
+
+async function runUserAction(action, userId) {
+  const labels = {
+    promote: "Make this user an administrator?",
+    demote: "Remove administrator access?",
+    suspend: "Suspend this user for 24 hours?",
+    unsuspend: "Remove this user's suspension?",
+    ban: "Ban this user?",
+    unban: "Unban this user?"
+  };
+
+  if (!confirm(labels[action] || "Confirm this action?")) {
+    return;
+  }
+
+  const { data, error } = await JC.sb.rpc(
+    "admin_manage_user",
+    {
+      p_user_id: userId,
+      p_action: action
+    }
+  );
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  if (!data?.success) {
+    alert(data?.message || "Admin action failed.");
+    return;
+  }
+
+  await loadUsers();
+  await refreshStats();
+}
+
+async function loadCommunities() {
+  /*
+    IMPORTANT:
+    Do NOT use profiles(...) here.
+
+    Your communities table has multiple relationships
+    to profiles, so PostgREST cannot guess which one
+    should be used.
+  */
+
+  const { data, error } = await JC.sb
+    .from("communities")
+    .select(
+      "id,name,slug,owner_id,is_locked,created_at"
+    )
+    .order("created_at", {
+      ascending: false
+    })
+    .limit(500);
+
+  if (error) {
+    showError("communitiesTable", error.message);
+    return;
+  }
+
+  const ownerIds = [
+    ...new Set(
+      (data || [])
+        .map(row => row.owner_id)
+        .filter(Boolean)
+    )
+  ];
+
+  let ownerMap = new Map();
+
+  if (ownerIds.length) {
+    const {
+      data: owners,
+      error: ownerError
+    } = await JC.sb
+      .from("profiles")
+      .select(
+        "id,display_name,username"
+      )
+      .in("id", ownerIds);
+
+    if (ownerError) {
+      console.error(
+        "Owner loading:",
+        ownerError
+      );
+    } else {
+      ownerMap = new Map(
+        (owners || []).map(owner => [
+          owner.id,
+          owner
+        ])
+      );
+    }
+  }
+
+  adminCommunities = (data || []).map(community => ({
+    ...community,
+    owner:
+      ownerMap.get(community.owner_id) || null
+  }));
+
+  renderCommunities();
+}
+
+function renderCommunities() {
+  const box =
+    document.getElementById(
+      "communitiesTable"
+    );
+
+  if (!box) return;
+
+  const q = (
+    document.getElementById(
+      "communitySearch"
+    )?.value || ""
+  ).trim().toLowerCase();
+
+  const communities =
+    adminCommunities.filter(community => {
+      const name =
+        (community.name || "").toLowerCase();
+
+      const slug =
+        (community.slug || "").toLowerCase();
+
+      return (
+        !q ||
+        name.includes(q) ||
+        slug.includes(q)
+      );
+    });
+
+  box.innerHTML = `
+    <div class="admin-table-row head">
+      <span>Community</span>
+      <span>Owner</span>
+      <span>Status</span>
+      <span>Created</span>
+      <span>Actions</span>
+    </div>
+
+    ${
+      communities.map(community => `
+        <div class="admin-table-row">
+
+          <span>
+            <strong>
+              ${escapeHTML(community.name)}
+            </strong>
+
+            <small>
+              /${escapeHTML(community.slug)}
+            </small>
+          </span>
+
+          <span>
+            ${escapeHTML(
+              community.owner?.display_name ||
+              "Unknown"
+            )}
+          </span>
+
+          <span>
+            ${
+              community.is_locked
+                ? `
+                  <span style="color:#ffd166">
+                    LOCKED
+                  </span>
+                `
+                : `
+                  <span style="color:#52e0a0">
+                    OPEN
+                  </span>
+                `
+            }
+          </span>
+
+          <span>
+            ${formatDate(
+              community.created_at
+            )}
+          </span>
+
+          <span style="display:flex;gap:5px;flex-wrap:wrap">
+
+            <button
+              class="admin-inline-btn"
+              data-community-action="toggle-lock"
+              data-id="${community.id}"
+            >
+              ${
+                community.is_locked
+                  ? "Unlock"
+                  : "Lock"
+              }
+            </button>
+
+            <button
+              class="admin-inline-btn danger"
+              data-community-action="delete"
+              data-id="${community.id}"
+            >
+              Delete
+            </button>
+
+          </span>
+
+        </div>
+      `).join("") || `
+        <div class="admin-table-row">
+          <span>No communities found.</span>
+        </div>
+      `
+    }
+  `;
+
+  box
+    .querySelectorAll(
+      "[data-community-action]"
+    )
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        runCommunityAction(
+          button.dataset.communityAction,
+          button.dataset.id
+        );
+      });
+    });
+}
+
+async function runCommunityAction(
+  action,
+  communityId
+) {
+  const message =
+    action === "delete"
+      ? "Delete this community and its content?"
+      : "Change this community's lock status?";
+
+  if (!confirm(message)) return;
+
+  const { data, error } = await JC.sb.rpc(
+    "admin_manage_community",
+    {
+      p_community_id: communityId,
+      p_action: action
+    }
+  );
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  if (!data?.success) {
+    alert(
+      data?.message ||
+      "Community action failed."
+    );
+    return;
+  }
+
+  await loadCommunities();
+  await refreshStats();
+}
+
+function buildMessageModeration() {
+  const section =
+    document.getElementById(
+      "messagesSection"
+    );
+
+  if (!section) return;
+
+  const grid =
+    section.querySelector(
+      ".admin-grid"
+    );
+
+  if (!grid) return;
+
+  const panel =
+    document.createElement(
+      "div"
+    );
+
+  panel.className =
+    "admin-panel";
+
+  panel.style.marginTop =
+    "15px";
+
+  panel.innerHTML = `
+    <div class="admin-panel-head">
+      <h2>Recent community messages</h2>
+      <p>
+        Delete messages directly from the platform.
+      </p>
+    </div>
+
+    <div id="moderationMessages"></div>
+  `;
+
+  section.appendChild(panel);
+
+  loadRecentMessages();
+}
+
+async function loadRecentMessages() {
+  const box =
+    document.getElementById(
+      "moderationMessages"
+    );
+
+  if (!box) return;
+
+  const { data, error } = await JC.sb
+    .from("messages")
+    .select(
+      "id,content,created_at,user_id,channel_id"
+    )
+    .order("created_at", {
+      ascending: false
+    })
+    .limit(100);
+
+  if (error) {
+    box.innerHTML = `
+      <div
+        class="setup-warning"
+        style="margin:15px"
+      >
+        ${escapeHTML(error.message)}
+      </div>
+    `;
+
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="admin-table-row head">
+      <span>Message</span>
+      <span>User</span>
+      <span>Time</span>
+      <span>ID</span>
+      <span>Action</span>
+    </div>
+
+    ${
+      (data || []).map(message => `
+        <div class="admin-table-row">
+
+          <span>
+            ${escapeHTML(
+              (message.content || "")
+                .slice(0, 80)
+            )}
+          </span>
+
+          <span>
+            ${escapeHTML(
+              message.user_id.slice(0, 8)
+            )}...
+          </span>
+
+          <span>
+            ${formatDate(
+              message.created_at
+            )}
+          </span>
+
+          <span>
+            ${message.id}
+          </span>
+
+          <span>
+            <button
+              class="admin-inline-btn danger"
+              data-delete-message="${message.id}"
+            >
+              Delete
+            </button>
+          </span>
+
+        </div>
+      `).join("") || `
+        <div class="admin-table-row">
+          <span>No messages.</span>
+        </div>
+      `
+    }
+  `;
+
+  box
+    .querySelectorAll(
+      "[data-delete-message]"
+    )
+    .forEach(button => {
+      button.addEventListener(
+        "click",
+        async () => {
+          if (!confirm("Delete this message?")) {
+            return;
+          }
+
+          const { data, error } =
+            await JC.sb.rpc(
+              "admin_delete_message",
+              {
+                p_message_id:
+                  Number(
+                    button.dataset
+                      .deleteMessage
+                  )
+              }
+            );
+
+          if (error) {
+            alert(error.message);
+            return;
+          }
+
+          if (!data?.success) {
+            alert(
+              data?.message ||
+              "Delete failed."
+            );
+            return;
+          }
+
+          await loadRecentMessages();
+          await refreshStats();
+        }
+      );
+    });
+}
+
+function injectAdminButtonStyles() {
+  if (
+    document.getElementById(
+      "jaszcweb-admin-inline-styles"
+    )
+  ) {
+    return;
+  }
+
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "jaszcweb-admin-inline-styles";
+
+  style.textContent = `
+    .admin-inline-btn{
+      border:1px solid #272b35;
+      background:#151820;
+      color:#aeb4bf;
+      border-radius:7px;
+      padding:7px 9px;
+      font-size:9px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+
+    .admin-inline-btn:hover{
+      color:#f4f6f8;
+      border-color:#c8ff38;
+    }
+
+    .admin-inline-btn.accent:hover{
+      color:#c8ff38;
+      border-color:#c8ff38;
+    }
+
+    .admin-inline-btn.danger:hover{
+      color:#ff6666;
+      border-color:#ff6666;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function showError(
+  elementId,
+  message
+) {
+  const element =
+    document.getElementById(
+      elementId
+    );
+
+  if (!element) return;
+
+  element.innerHTML = `
+    <div
+      class="setup-warning"
+      style="margin:15px"
+    >
+      ${escapeHTML(message)}
+    </div>
+  `;
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  return new Date(
+    value
+  ).toLocaleString();
+}
+
+function escapeHTML(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
