@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JASZCWEB — Admin</title>
+
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+
+<body class="app-body">
+
+  <div class="admin-shell">
+
+    <aside class="admin-sidebar">
+
+      <div class="admin-brand">
+        JASZC<span>WEB</span>
+        <small>ADMIN</small>
+      </div>
+
+      <nav>
+        <button class="admin-nav active" data-section="overview">
+          ◈ Overview
+        </button>
+
+        <button class="admin-nav" data-section="users">
+          ◉ Users
+        </button>
+
+        <button class="admin-nav" data-section="communities">
+          ◫ Communities
+        </button>
+
+        <button class="admin-nav" data-section="messages">
+          ◇ Messages
+        </button>
+
+        <button class="admin-nav" data-section="system">
+          ⚙ System
+        </button>
+      </nav>
+
+      <div class="admin-side-bottom">
+        <a href="dashboard.html">← Back to JASZCWEB</a>
+        <button id="adminLogout">↪ Sign out</button>
+      </div>
+
+    </aside>
+
+
+    <main class="admin-main">
+
+      <header class="admin-topbar">
+
+        <div>
+          <div class="eyebrow">PLATFORM CONTROL</div>
+          <h1 id="adminPageTitle">Overview</h1>
+        </div>
+
+        <div id="adminUser" class="admin-user"></div>
+
+      </header>
+
+
+      <!-- OVERVIEW -->
+
+      <section id="overviewSection" class="admin-section active">
+
+        <div class="admin-stats">
+
+          <div class="admin-stat">
+            <span>Total users</span>
+            <strong id="statUsers">—</strong>
+          </div>
+
+          <div class="admin-stat">
+            <span>Communities</span>
+            <strong id="statCommunities">—</strong>
+          </div>
+
+          <div class="admin-stat">
+            <span>Community messages</span>
+            <strong id="statMessages">—</strong>
+          </div>
+
+          <div class="admin-stat">
+            <span>Direct messages</span>
+            <strong id="statDMs">—</strong>
+          </div>
+
+        </div>
+
+
+        <div class="admin-grid">
+
+          <div class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <h2>Platform status</h2>
+                <p>Current JASZCWEB database status.</p>
+              </div>
+              <span class="status-pill online">ONLINE</span>
+            </div>
+
+            <div class="system-row">
+              <span>Database</span>
+              <strong>Connected</strong>
+            </div>
+
+            <div class="system-row">
+              <span>Authentication</span>
+              <strong>Active</strong>
+            </div>
+
+            <div class="system-row">
+              <span>Realtime</span>
+              <strong>Active</strong>
+            </div>
+
+            <div class="system-row">
+              <span>Environment</span>
+              <strong>Production</strong>
+            </div>
+          </div>
+
+
+          <div class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <h2>Quick actions</h2>
+                <p>Jump directly to important areas.</p>
+              </div>
+            </div>
+
+            <button class="admin-action" data-section="users">
+              Manage users →
+            </button>
+
+            <button class="admin-action" data-section="communities">
+              Manage communities →
+            </button>
+
+            <button class="admin-action" data-section="system">
+              System information →
+            </button>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- USERS -->
+
+      <section id="usersSection" class="admin-section">
+
+        <div class="admin-section-head">
+          <div>
+            <div class="eyebrow">ACCOUNTS</div>
+            <h2>Users</h2>
+            <p>Every registered JASZCWEB account.</p>
+          </div>
+
+          <input
+            id="userSearch"
+            class="admin-search"
+            placeholder="⌕ Search users..."
+          >
+        </div>
+
+        <div class="admin-panel">
+          <div id="usersTable" class="admin-table"></div>
+        </div>
+
+      </section>
+
+
+      <!-- COMMUNITIES -->
+
+      <section id="communitiesSection" class="admin-section">
+
+        <div class="admin-section-head">
+
+          <div>
+            <div class="eyebrow">PLATFORM</div>
+            <h2>Communities</h2>
+            <p>All communities created on JASZCWEB.</p>
+          </div>
+
+          <input
+            id="communitySearch"
+            class="admin-search"
+            placeholder="⌕ Search communities..."
+          >
+
+        </div>
+
+        <div class="admin-panel">
+          <div id="communitiesTable" class="admin-table"></div>
+        </div>
+
+      </section>
+
+
+      <!-- MESSAGES -->
+
+      <section id="messagesSection" class="admin-section">
+
+        <div class="admin-section-head">
+
+          <div>
+            <div class="eyebrow">ACTIVITY</div>
+            <h2>Messages</h2>
+            <p>Platform messaging statistics.</p>
+          </div>
+
+        </div>
+
+
+        <div class="admin-grid">
+
+          <div class="admin-panel big-number">
+            <span>Community messages</span>
+            <strong id="messageBig">—</strong>
+          </div>
+
+          <div class="admin-panel big-number">
+            <span>Direct messages</span>
+            <strong id="dmBig">—</strong>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- SYSTEM -->
+
+      <section id="systemSection" class="admin-section">
+
+        <div class="admin-section-head">
+
+          <div>
+            <div class="eyebrow">SYSTEM</div>
+            <h2>System</h2>
+            <p>JASZCWEB platform information.</p>
+          </div>
+
+        </div>
+
+
+        <div class="admin-panel">
+
+          <div class="system-row">
+            <span>Current account</span>
+            <strong id="systemEmail">—</strong>
+          </div>
+
+          <div class="system-row">
+            <span>Admin access</span>
+            <strong>Granted</strong>
+          </div>
+
+          <div class="system-row">
+            <span>Site</span>
+            <strong>JASZCWEB</strong>
+          </div>
+
+          <div class="system-row">
+            <span>Environment</span>
+            <strong>Production</strong>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/admin.js"></script>
+
+</body>
+</html>
